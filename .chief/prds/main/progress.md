@@ -38,6 +38,15 @@
 - EnsureEmailProvided middleware on protected routes — redirects null-email users to /email-capture
 - Email capture routes and logout exempt from EnsureEmailProvided to avoid redirect loops
 - Profile email is nullable — ProfileValidationRules supports `required` flag for email rules
+- Account deletion uses username confirmation (not password) — GitHub OAuth users have no password
+- Account deletion cleans up: revoke device tokens, destroy cloud servers, remove PII, then soft-delete
+- Rate limiting syntax: `throttle:1,60` = 1 attempt per 60 minutes per user
+- EnsureEmailProvided middleware intercepts ALL routes in the group — tests creating null-email users must account for this
+- API routes are in `routes/api.php` with `/api` prefix — registered via `bootstrap/app.php` withRouting
+- Device OAuth uses custom HMAC-signed access tokens (not Sanctum/Passport) — `DeviceOAuthController::validateAccessToken()` for validation
+- Rate limiters defined in `bootstrap/app.php` via `->booted()` callback using `RateLimiter::for()`
+- Refresh tokens stored as bcrypt hashes in `device_authorizations.refresh_token_hash` — lookup requires iterating all non-revoked devices
+- OauthDeviceCode user_code format: `XXXX-XXXX` (uppercase alphanumeric with hyphen)
 
 ---
 
@@ -298,5 +307,63 @@
   - ProfileValidationRules trait is shared — changes to email rules affect both profile update and any other consumer
   - UserFactory `withoutEmail()` state is useful for testing null-email scenarios
   - Middleware-based redirect approach is cleaner than checking in every controller
+
+---
+
+## 2026-02-15 - US-008
+- What was implemented:
+  - Account settings page shows GitHub username (read-only), avatar, email (editable), and member since date
+  - Profile information section with name and email update form (email is optional/nullable)
+  - Account deletion now requires typing GitHub username to confirm (replaced password confirmation)
+  - Deletion confirmation dialog with clear warning text about consequences (deauthorize devices, destroy cloud servers)
+  - Account deletion backend: revokes all device tokens, marks active cloud deployments as destroyed, removes personal data (email, avatar_url, notification_preferences), soft-deletes user
+  - After deletion, redirects to /login with "Account deleted" status message
+  - Rate limiting on account deletion: 1 attempt per hour (throttle:1,60 middleware)
+  - Updated User TypeScript type to include github_username and avatar_url
+  - 11 tests covering: profile display, profile updates, email update/clear, username-based deletion, wrong username rejection, device revocation on deletion, cloud deployment destruction, personal data removal, status message display
+  - All 38 tests passing, Pint clean, ESLint clean (pre-existing errors only in auto-generated files), build passing
+- Files changed:
+  - app/Http/Controllers/Settings/ProfileController.php (updated: removed mustVerifyEmail, enhanced destroy with device/cloud/data cleanup, redirect to /login with status)
+  - app/Http/Requests/Settings/ProfileDeleteRequest.php (rewritten: username confirmation instead of password)
+  - resources/js/components/DeleteUser.vue (rewritten: username confirmation dialog, useForm, v-model dialog)
+  - resources/js/pages/settings/Profile.vue (updated: account info section with avatar, github_username, member since)
+  - resources/js/types/auth.ts (updated: added github_username, avatar_url to User type)
+  - routes/settings.php (updated: throttle middleware on profile.destroy)
+  - tests/Feature/Settings/ProfileUpdateTest.php (rewritten: username-based deletion tests, new email tests, device/cloud/data cleanup tests)
+- **Learnings for future iterations:**
+  - Account deletion uses username confirmation (not password) since users authenticate via GitHub OAuth and may not have a password
+  - EnsureEmailProvided middleware intercepts ALL requests in the middleware group — tests that create users with null email and then PATCH the profile will be redirected before the controller runs
+  - The `throttle:1,60` middleware syntax means 1 attempt per 60 minutes — applied per-user by default
+  - DeleteUser component uses `useForm` composable (not `<Form>` component) for more control over dialog state and error handling
+  - Cloud deployments status update uses `whereNotIn('status', ['destroyed'])` to avoid re-destroying already-destroyed servers
+  - Personal data is cleared before soft-delete so the record doesn't contain PII after deletion
+
+---
+
+## 2026-02-15 - US-009
+- What was implemented:
+  - POST /oauth/device/code — generates device_code and human-readable user_code (XXXX-XXXX format), stores in oauth_device_codes with 15-minute expiry
+  - POST /oauth/device/token — polls for approval, returns access + refresh tokens on approval, enforces 5-second minimum polling interval (returns slow_down), handles pending/denied/expired states
+  - POST /oauth/token — refreshes access token using refresh_token grant_type, rotates refresh token (old invalidated, new issued), updates last_ip
+  - POST /oauth/revoke — revokes refresh token, marks device offline, always returns 200 per OAuth 2.0 spec
+  - POST /oauth/device/exchange — exchanges one-time VPS setup token for access + refresh tokens, token is single-use and supports expiry
+  - Custom HMAC-signed access tokens (1-hour expiry, not stored in DB) with static validateAccessToken() method
+  - Rate limiting: device code requests limited to 10 per IP per 15 minutes, token refresh limited to 30 per device per hour
+  - All endpoints return proper OAuth 2.0 error responses (error + error_description fields)
+  - 30 tests covering all endpoints, validation, edge cases, token validation, and rate limiting
+  - All 68 tests passing, Pint clean, ESLint clean (pre-existing errors only)
+- Files changed:
+  - app/Http/Controllers/Api/DeviceOAuthController.php (new: all 5 endpoints + token generation/validation)
+  - routes/api.php (new: API routes for device OAuth with rate limiting middleware)
+  - bootstrap/app.php (updated: added API route registration, rate limiter definitions)
+  - tests/Feature/Api/DeviceOAuthTest.php (new: 30 comprehensive tests)
+- **Learnings for future iterations:**
+  - Laravel 12 API routes are registered via `bootstrap/app.php` `->withRouting(api: ...)` — no RouteServiceProvider
+  - Rate limiters are defined in the `->booted()` callback in bootstrap/app.php using `RateLimiter::for()`
+  - Custom HMAC-signed tokens are simpler than Sanctum/Passport for machine-to-machine auth — `DeviceOAuthController::validateAccessToken()` for validation
+  - Refresh token lookup requires iterating all non-revoked devices since bcrypt hashes can't be used for direct DB lookup
+  - The `Limit::perMinutes(15, 10)` syntax means 10 requests per 15 minutes — note argument order is (minutes, maxAttempts)
+  - API routes automatically get the `/api` prefix when registered via `withRouting(api: ...)`
+  - OAuth 2.0 spec requires revocation endpoint to always return 200 even for invalid tokens
 
 ---

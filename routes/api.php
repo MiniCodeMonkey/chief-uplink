@@ -1,0 +1,36 @@
+<?php
+
+use App\Http\Controllers\Api\DeviceOAuthController;
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| Device OAuth API Routes
+|--------------------------------------------------------------------------
+|
+| These routes handle the device OAuth flow for chief CLI instances.
+| All endpoints are public (no session/cookie auth) and use JSON.
+|
+*/
+
+// Device code request — CLI calls this to start the device flow
+Route::post('/oauth/device/code', [DeviceOAuthController::class, 'requestCode'])
+    ->middleware('throttle:device-code')
+    ->name('oauth.device.code');
+
+// Token polling — CLI polls this to check if device code was approved
+Route::post('/oauth/device/token', [DeviceOAuthController::class, 'pollToken'])
+    ->name('oauth.device.token');
+
+// Token refresh — CLI uses this to get a new access token
+Route::post('/oauth/token', [DeviceOAuthController::class, 'refreshToken'])
+    ->middleware('throttle:token-refresh')
+    ->name('oauth.token');
+
+// Token revocation — CLI uses this to revoke its tokens
+Route::post('/oauth/revoke', [DeviceOAuthController::class, 'revokeToken'])
+    ->name('oauth.revoke');
+
+// Setup token exchange — VPS uses this to auto-authenticate
+Route::post('/oauth/device/exchange', [DeviceOAuthController::class, 'exchangeSetupToken'])
+    ->name('oauth.device.exchange');

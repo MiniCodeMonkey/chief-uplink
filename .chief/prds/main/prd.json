@@ -185,7 +185,8 @@
         "All endpoints return proper OAuth 2.0 error responses"
       ],
       "priority": 9,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-010",
