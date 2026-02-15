@@ -15,3 +15,10 @@ Route::get('dashboard', function () {
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 require __DIR__.'/settings.php';
+
+// Dev-only component playground
+if (app()->environment('local')) {
+    Route::get('/dev/components', function () {
+        return Inertia::render('dev/Components');
+    })->name('dev.components');
+}

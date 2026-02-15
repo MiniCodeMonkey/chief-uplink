@@ -87,7 +87,8 @@
         "Storybook or equivalent: Component playground page at /dev/components (dev only) showing all components in all states for visual QA"
       ],
       "priority": 4,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-005",

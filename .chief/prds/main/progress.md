@@ -13,6 +13,16 @@
 - CloudDeployment.provider_api_key uses `encrypted` cast (Laravel's built-in encryption)
 - CachedProjectState table name is `cached_project_state` (singular), RunHistory is `run_history`, LogCache is `log_cache`
 - Factory states: DeviceAuthorization (online/offline/revoked), CachedProjectState (running/idle/error/paused/noPrd), RunHistory (completed/failed/paused/stopped), CloudDeployment (provisioning/destroyed/hetzner/digitalocean)
+- ESLint config ignores `resources/js/components/ui/*` — shadcn components are not linted
+- Tailwind CSS 4 uses inline `@theme` in `resources/css/app.css` — no tailwind.config.js
+- Design system colors use oklch() in CSS variables; primary = amber-gold, semantic colors = success/warning/info/destructive
+- Geist fonts loaded via `@font-face` referencing `/node_modules/geist/dist/fonts/` (variable font woff2)
+- Custom transition curves: `--ease-snappy` (cubic-bezier(0.2,0,0,1)), `--ease-gentle` (cubic-bezier(0.4,0,0.2,1))
+- Animation durations: `--duration-micro` (100ms), `--duration-standard` (200ms), `--duration-slow` (300ms)
+- New components: Select, Toggle, ProgressBar, StatusDot, Toast/ToastContainer, ConfirmDialog, CopyButton, EmptyState
+- Toast system uses `useToast()` composable with global reactive state — import from `@/composables/useToast`
+- Optimistic UI updates via `useOptimistic()` composable — import from `@/composables/useOptimistic`
+- Dev-only routes guarded with `app()->environment('local')` in routes/web.php
 
 ---
 
@@ -96,5 +106,51 @@
   - Factory `unique()` with `randomElement()` fails when creating more records than array elements — use non-unique or pass slug explicitly in seeders
   - Laravel 12 handles column changes natively (no doctrine/dbal needed)
   - Table names for some models are non-standard (cached_project_state, run_history, log_cache) — must set `$table` explicitly in the model
+
+---
+
+## 2026-02-15 - US-004
+- What was implemented:
+  - Tailwind CSS 4 custom theme with PRD-specified color palette (amber-gold primary, oklch colors, semantic colors)
+  - Geist and Geist Mono variable fonts loaded via @font-face with system font fallbacks
+  - Light mode palette with proper contrast ratios and dark mode with PRD-specified dark backgrounds
+  - Semantic color tokens: success (green), warning (amber), info (blue), destructive (red)
+  - Custom transition curves (snappy/gentle) and animation duration tokens (micro/standard/slow)
+  - Button press-scale micro-interaction (scale 0.97 on active)
+  - Reduced motion support via @media (prefers-reduced-motion: reduce)
+  - Card styling: subtle border, no shadow, 8px radius (rounded-lg)
+  - New UI components: Select (full dropdown with trigger/content/item/group/label/separator), Toggle (switch), ProgressBar, StatusDot (online/reconnecting/offline/never-connected), Toast + ToastContainer, ConfirmDialog (with type-to-confirm), CopyButton (with checkmark animation), EmptyState (with icon/action slot)
+  - useToast composable: global reactive toast state with success/error/warning/info helpers, auto-dismiss for non-errors
+  - useOptimistic composable: optimistic UI state management with rollback on failure
+  - Component playground at /dev/components (dev-only route) showing all components in all states with theme switcher
+  - Shimmer animation utility class for skeletons (GPU-accelerated CSS)
+  - Shake animation for error rollback feedback
+  - Pulse-dot keyframe for reconnecting status dot
+  - All 41 existing Pest tests passing, ESLint clean, Prettier clean, Pint clean
+- Files changed:
+  - resources/css/app.css (rewritten: Geist fonts, oklch colors, semantic tokens, transitions, animations, reduced motion)
+  - resources/js/app.ts (updated: progress bar color to amber-gold)
+  - resources/js/components/ui/button/index.ts (updated: added active:scale-[0.97] press interaction)
+  - resources/js/components/ui/card/Card.vue (updated: rounded-lg, no shadow)
+  - resources/js/components/ui/select/ (new: 8 files - Select, SelectTrigger, SelectContent, SelectItem, SelectValue, SelectGroup, SelectLabel, SelectSeparator)
+  - resources/js/components/ui/toggle/ (new: Toggle.vue, index.ts)
+  - resources/js/components/ui/progress-bar/ (new: ProgressBar.vue, index.ts)
+  - resources/js/components/ui/status-dot/ (new: StatusDot.vue, index.ts)
+  - resources/js/components/ui/toast/ (new: Toast.vue, ToastContainer.vue, index.ts)
+  - resources/js/components/ui/confirm-dialog/ (new: ConfirmDialog.vue, index.ts)
+  - resources/js/components/ui/copy-button/ (new: CopyButton.vue, index.ts)
+  - resources/js/components/ui/empty-state/ (new: EmptyState.vue, index.ts)
+  - resources/js/composables/useToast.ts (new)
+  - resources/js/composables/useOptimistic.ts (new)
+  - resources/js/pages/dev/Components.vue (new: component playground)
+  - routes/web.php (updated: dev-only /dev/components route)
+  - package.json, package-lock.json (updated: added geist font package)
+- **Learnings for future iterations:**
+  - Tailwind CSS 4 has no tailwind.config.js — everything is in @theme inline in CSS
+  - ESLint config ignores all files in resources/js/components/ui/* — shadcn components are pre-built and not linted
+  - Pre-existing type errors exist (TwoFactorSetupModal.vue, echo.ts) — not related to design system changes
+  - Geist font paths reference /node_modules/geist/ — Vite resolves these during build
+  - oklch() color values give better perceptual uniformity than hsl() for dark/light mode palettes
+  - The Card component originally had shadow-sm and rounded-xl from the starter kit — needed to be changed to match PRD spec
 
 ---
