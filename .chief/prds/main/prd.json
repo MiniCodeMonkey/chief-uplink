@@ -21,8 +21,8 @@
         "composer install \u0026\u0026 npm install \u0026\u0026 php artisan migrate gets a working app"
       ],
       "priority": 1,
-      "passes": false,
-      "inProgress": true
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-002",
@@ -42,7 +42,8 @@
         "License section (MIT)"
       ],
       "priority": 2,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-003",
