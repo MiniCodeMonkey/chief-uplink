@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\DeviceAuthorization;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -42,6 +43,73 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'devices' => fn () => $this->getDevices($request),
+            'selectedDeviceId' => fn () => $this->getSelectedDeviceId($request),
         ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function getDevices(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return [];
+        }
+
+        return DeviceAuthorization::where('user_id', $user->id)
+            ->whereNull('revoked_at')
+            ->with('cachedProjectStates')
+            ->get()
+            ->map(function (DeviceAuthorization $device) {
+                return [
+                    'id' => $device->id,
+                    'device_name' => $device->device_name,
+                    'os' => $device->os,
+                    'arch' => $device->arch,
+                    'chief_version' => $device->chief_version,
+                    'is_online' => $device->is_online,
+                    'last_connected_at' => $device->last_connected_at?->toISOString(),
+                    'connection_status' => $this->getConnectionStatus($device),
+                    'projects' => $device->cachedProjectStates->map(function ($project) {
+                        return [
+                            'id' => $project->id,
+                            'device_authorization_id' => $project->device_authorization_id,
+                            'project_slug' => $project->project_slug,
+                            'project_name' => $project->project_name,
+                            'status' => $project->status,
+                            'git_branch' => $project->git_branch,
+                            'current_prd_name' => $project->current_prd_name,
+                            'stories_completed' => $project->stories_completed,
+                            'stories_total' => $project->stories_total,
+                        ];
+                    })->toArray(),
+                ];
+            })->toArray();
+    }
+
+    private function getSelectedDeviceId(Request $request): ?int
+    {
+        $cookie = $request->cookie('selected_device_id');
+
+        return $cookie ? (int) $cookie : null;
+    }
+
+    private function getConnectionStatus(DeviceAuthorization $device): string
+    {
+        if ($device->is_online) {
+            return 'online';
+        }
+
+        if ($device->last_connected_at === null) {
+            return 'never-connected';
+        }
+
+        if ($device->last_connected_at->diffInSeconds(now()) < 60) {
+            return 'reconnecting';
+        }
+
+        return 'offline';
     }
 }

@@ -1,18 +1,13 @@
 <script setup lang="ts">
-import AppLayout from '@/layouts/app/AppSidebarLayout.vue';
-import type { BreadcrumbItem } from '@/types';
-
-type Props = {
-    breadcrumbs?: BreadcrumbItem[];
-};
-
-withDefaults(defineProps<Props>(), {
-    breadcrumbs: () => [],
-});
+import AppContent from '@/components/AppContent.vue';
+import AppHeader from '@/components/AppHeader.vue';
 </script>
 
 <template>
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <slot />
-    </AppLayout>
+    <div class="flex min-h-screen w-full flex-col">
+        <AppHeader />
+        <AppContent>
+            <slot />
+        </AppContent>
+    </div>
 </template>

@@ -23,6 +23,14 @@
 - Toast system uses `useToast()` composable with global reactive state — import from `@/composables/useToast`
 - Optimistic UI updates via `useOptimistic()` composable — import from `@/composables/useOptimistic`
 - Dev-only routes guarded with `app()->environment('local')` in routes/web.php
+- Layout uses header-based pattern (not sidebar) — AppLayout wraps AppHeader + AppContent
+- ProjectLayout extends AppLayout with ProjectTabBar (desktop top tabs + mobile bottom tabs)
+- BreadcrumbPicker: hierarchical navigation (Chief logo → Server ▾ → Project ▾) in the top bar
+- Inertia shared props include `devices` (with nested projects) and `selectedDeviceId` from cookie
+- Selected device stored in `selected_device_id` cookie (client-side set)
+- Project routes: `/projects/{slug}`, `/projects/{slug}/run`, `/projects/{slug}/diffs`, `/projects/{slug}/prds`
+- Settings pages no longer use breadcrumbs prop — navigation is handled by BreadcrumbPicker
+- KeyboardShortcutsOverlay toggled via `?` shortcut or user menu
 
 ---
 
@@ -152,5 +160,56 @@
   - Geist font paths reference /node_modules/geist/ — Vite resolves these during build
   - oklch() color values give better perceptual uniformity than hsl() for dark/light mode palettes
   - The Card component originally had shadow-sm and rounded-xl from the starter kit — needed to be changed to match PRD spec
+
+---
+
+## 2026-02-15 - US-005
+- What was implemented:
+  - Replaced sidebar layout with header-based layout using BreadcrumbPicker navigation
+  - BreadcrumbPicker: hierarchical Chief logo → Server dropdown → Project dropdown
+  - ServerDropdown: shows all authorized devices with StatusDot (online/reconnecting/offline/never-connected), keyboard navigable
+  - ProjectDropdown: shows projects for selected server with status badges, navigates to project detail
+  - Updated AppHeader: simplified top bar with BreadcrumbPicker on left, user avatar dropdown on right
+  - UserMenuContent: added keyboard shortcuts link with `?` badge and Sign Out (renamed from "Log out")
+  - KeyboardShortcutsOverlay: modal showing shortcuts (Cmd+K, Cmd+Enter, Cmd+., Esc, ?), Mac/Windows aware
+  - ProjectTabBar: desktop horizontal top tabs + mobile fixed bottom tab bar with safe-area-inset support
+  - ProjectLayout: wraps AppHeader + ProjectTabBar + content with bottom padding for mobile
+  - Project detail pages (placeholder): Overview, Run, Diffs, PRDs at /projects/{slug}/*
+  - Routes for all project detail pages with CachedProjectState lookup
+  - HandleInertiaRequests shares `devices` (with nested projects) and `selectedDeviceId` as lazy-evaluated props
+  - Updated all settings pages to use new AppLayout (no breadcrumbs prop)
+  - Responsive breakpoints: mobile bottom tab bar (<lg), desktop top tab bar (>=lg)
+  - Focus management: focus-ring utility, keyboard navigation in dropdowns (Arrow keys, Enter, Escape)
+  - Inertia page transitions via built-in progress bar (amber-gold)
+  - No layout shifts: fixed dimensions for header (h-14), tab bars, status dots
+- Files changed:
+  - app/Http/Middleware/HandleInertiaRequests.php (added devices/selectedDeviceId shared props)
+  - resources/js/components/AppHeader.vue (rewritten: BreadcrumbPicker + avatar dropdown)
+  - resources/js/components/BreadcrumbPicker.vue (new)
+  - resources/js/components/ServerDropdown.vue (new)
+  - resources/js/components/ProjectDropdown.vue (new)
+  - resources/js/components/ProjectTabBar.vue (new)
+  - resources/js/components/KeyboardShortcutsOverlay.vue (new)
+  - resources/js/components/UserMenuContent.vue (updated: added shortcuts link, renamed "Log out" to "Sign out")
+  - resources/js/layouts/AppLayout.vue (simplified: header-based, no breadcrumbs prop)
+  - resources/js/layouts/ProjectLayout.vue (new: header + tab bar + content)
+  - resources/js/pages/Dashboard.vue (simplified: no breadcrumbs, no PlaceholderPattern)
+  - resources/js/pages/projects/Overview.vue (new placeholder)
+  - resources/js/pages/projects/Run.vue (new placeholder)
+  - resources/js/pages/projects/Diffs.vue (new placeholder)
+  - resources/js/pages/projects/Prds.vue (new placeholder)
+  - resources/js/pages/settings/Profile.vue (removed breadcrumbs)
+  - resources/js/pages/settings/Password.vue (removed breadcrumbs)
+  - resources/js/pages/settings/Appearance.vue (removed breadcrumbs)
+  - resources/js/pages/settings/TwoFactor.vue (removed breadcrumbs)
+  - resources/js/types/navigation.ts (added DeviceSummary, ProjectSummary, ProjectTab types)
+  - routes/web.php (added project detail routes)
+- **Learnings for future iterations:**
+  - AppLayout no longer takes breadcrumbs — all navigation is via BreadcrumbPicker in the header
+  - The starter kit's sidebar layout (AppSidebar, SidebarProvider, etc.) is still available but not used by the main layout
+  - Dropdowns use custom implementation with Teleport + Transition for proper z-index/overlay behavior
+  - Cookie-based device selection persists across page loads without server-side session storage
+  - Project routes resolve via CachedProjectState.project_slug — the slug must exist in the DB
+  - Pre-existing TypeScript errors (TwoFactorSetupModal.vue, echo.ts) are unrelated and still present
 
 ---

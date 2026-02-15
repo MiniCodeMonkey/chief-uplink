@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
-import { LogOut, Settings } from 'lucide-vue-next';
+import { Keyboard, LogOut, Settings } from 'lucide-vue-next';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -15,6 +15,10 @@ import type { User } from '@/types';
 type Props = {
     user: User;
 };
+
+defineEmits<{
+    'show-shortcuts': [];
+}>();
 
 const handleLogout = () => {
     router.flushAll();
@@ -37,6 +41,14 @@ defineProps<Props>();
                 Settings
             </Link>
         </DropdownMenuItem>
+        <DropdownMenuItem @click="$emit('show-shortcuts')">
+            <Keyboard class="mr-2 h-4 w-4" />
+            Keyboard shortcuts
+            <span
+                class="ml-auto rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                >?</span
+            >
+        </DropdownMenuItem>
     </DropdownMenuGroup>
     <DropdownMenuSeparator />
     <DropdownMenuItem :as-child="true">
@@ -48,7 +60,7 @@ defineProps<Props>();
             data-test="logout-button"
         >
             <LogOut class="mr-2 h-4 w-4" />
-            Log out
+            Sign out
         </Link>
     </DropdownMenuItem>
 </template>

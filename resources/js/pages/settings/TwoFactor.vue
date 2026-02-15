@@ -10,8 +10,7 @@ import { Button } from '@/components/ui/button';
 import { useTwoFactorAuth } from '@/composables/useTwoFactorAuth';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
-import { disable, enable, show } from '@/routes/two-factor';
-import type { BreadcrumbItem } from '@/types';
+import { disable, enable } from '@/routes/two-factor';
 
 type Props = {
     requiresConfirmation?: boolean;
@@ -23,13 +22,6 @@ withDefaults(defineProps<Props>(), {
     twoFactorEnabled: false,
 });
 
-const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Two-Factor Authentication',
-        href: show.url(),
-    },
-];
-
 const { hasSetupData, clearTwoFactorAuthData } = useTwoFactorAuth();
 const showSetupModal = ref<boolean>(false);
 
@@ -39,7 +31,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <AppLayout :breadcrumbs="breadcrumbs">
+    <AppLayout>
         <Head title="Two-Factor Authentication" />
 
         <h1 class="sr-only">Two-Factor Authentication Settings</h1>

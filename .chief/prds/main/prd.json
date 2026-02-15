@@ -112,7 +112,8 @@
         "No layout shifts: Content areas reserve space for dynamic content. Progress bars, status dots, and badges have fixed dimensions. Cumulative Layout Shift (CLS) target: 0."
       ],
       "priority": 5,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-006",
