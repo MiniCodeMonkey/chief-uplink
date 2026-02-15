@@ -46,6 +46,10 @@ class GitHubAuthController extends Controller
 
         Auth::login($user, remember: true);
 
+        if ($user->email === null) {
+            return redirect()->route('email-capture.show');
+        }
+
         return redirect()->intended(route('dashboard'));
     }
 

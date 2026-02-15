@@ -60,11 +60,13 @@ const user = page.props.auth.user;
                             type="email"
                             class="mt-1 block w-full"
                             name="email"
-                            :default-value="user.email"
-                            required
+                            :default-value="user.email ?? ''"
                             autocomplete="username"
                             placeholder="Email address"
                         />
+                        <p class="text-xs text-muted-foreground">
+                            Used for notifications. Leave empty for push-only notifications.
+                        </p>
                         <InputError class="mt-2" :message="errors.email" />
                     </div>
 

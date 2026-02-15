@@ -5,7 +5,11 @@
 - ESLint auto-fix with `npx eslint . --fix`, Pint with `./vendor/bin/pint`
 - Composer dev script (`composer run dev`) runs: server, queue, logs, vite, reverb concurrently
 - `.env.example` has PostgreSQL defaults; `.env` locally uses SQLite for simplicity
-- Starter kit includes Fortify for authentication (email/password + 2FA)
+- Authentication uses GitHub OAuth via Socialite (Fortify features disabled, views disabled)
+- GitHubAuthController handles login redirect, callback, and logout
+- Login page at /login, callback at /auth/github/callback, logout at POST /logout
+- `guest` middleware redirects authenticated users to `/dashboard` (configured via fortify.home)
+- Old Fortify auth pages (register, password reset, email verify, 2FA) removed — not needed with GitHub OAuth
 - UI components are in `resources/js/components/ui/` (shadcn/vue style with reka-ui)
 - Generated action/route types are gitignored (`resources/js/actions`, `resources/js/routes`, `resources/js/wayfinder`)
 - User model uses SoftDeletes — tests checking deletion should use `assertSoftDeleted()` not `fresh()->toBeNull()`
@@ -31,6 +35,9 @@
 - Project routes: `/projects/{slug}`, `/projects/{slug}/run`, `/projects/{slug}/diffs`, `/projects/{slug}/prds`
 - Settings pages no longer use breadcrumbs prop — navigation is handled by BreadcrumbPicker
 - KeyboardShortcutsOverlay toggled via `?` shortcut or user menu
+- EnsureEmailProvided middleware on protected routes — redirects null-email users to /email-capture
+- Email capture routes and logout exempt from EnsureEmailProvided to avoid redirect loops
+- Profile email is nullable — ProfileValidationRules supports `required` flag for email rules
 
 ---
 
@@ -211,5 +218,85 @@
   - Cookie-based device selection persists across page loads without server-side session storage
   - Project routes resolve via CachedProjectState.project_slug — the slug must exist in the DB
   - Pre-existing TypeScript errors (TwoFactorSetupModal.vue, echo.ts) are unrelated and still present
+
+---
+
+## 2026-02-15 - US-006
+- What was implemented:
+  - GitHub OAuth login via Laravel Socialite (GitHubAuthController with redirect, callback, logout)
+  - New login page at /login with centered card, Chief logo, tagline, "Sign in with GitHub" button
+  - Button shows loading spinner while redirecting to GitHub
+  - Auto-focuses sign-in button on page load for keyboard users
+  - Subtle ambient gradient animation on login page (respects prefers-reduced-motion)
+  - Login page styled with dark mode support consistent with design system
+  - GitHub callback creates/updates user with github_id, github_username, avatar_url, email
+  - Soft-deleted users rejected on login attempt (shown status message)
+  - Logout clears session and redirects to /login
+  - All protected routes redirect unauthenticated users to /login
+  - Disabled Fortify features (registration, password reset, email verification, 2FA)
+  - Removed dead auth pages (Register, ForgotPassword, ResetPassword, VerifyEmail, ConfirmPassword, TwoFactorChallenge)
+  - Removed dead settings pages (Password, TwoFactor) and their routes
+  - Removed Welcome page (home now redirects to dashboard)
+  - Updated settings layout navigation (Profile + Appearance only)
+  - Updated Profile page to remove email verification references
+  - Comprehensive test suite for GitHub OAuth (10 auth tests)
+  - All 19 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - app/Http/Controllers/Auth/GitHubAuthController.php (new)
+  - app/Providers/FortifyServiceProvider.php (stripped — Fortify features disabled)
+  - config/fortify.php (features emptied, views disabled)
+  - routes/web.php (GitHub OAuth routes, home redirect, removed verified middleware)
+  - routes/settings.php (removed password/2FA routes, removed verified middleware)
+  - resources/js/pages/auth/Login.vue (rewritten: GitHub OAuth button, ambient animation)
+  - resources/js/pages/settings/Profile.vue (removed email verification imports)
+  - resources/js/layouts/settings/Layout.vue (removed password/2FA nav items)
+  - resources/js/pages/Welcome.vue (deleted)
+  - resources/js/pages/auth/{ConfirmPassword,ForgotPassword,Register,ResetPassword,TwoFactorChallenge,VerifyEmail}.vue (deleted)
+  - resources/js/pages/settings/{Password,TwoFactor}.vue (deleted)
+  - tests/Feature/Auth/AuthenticationTest.php (rewritten: GitHub OAuth tests with Socialite mocking)
+  - tests/Feature/ExampleTest.php (updated: home now redirects to dashboard)
+  - tests/Feature/Auth/{EmailVerification,PasswordConfirmation,PasswordReset,Registration,TwoFactorChallenge,VerificationNotification}Test.php (deleted)
+  - tests/Feature/Settings/{PasswordUpdate,TwoFactorAuthentication}Test.php (deleted)
+- **Learnings for future iterations:**
+  - Socialite mock pattern: use anonymous class wrapping SocialiteUser and `Socialite::shouldReceive('driver')` for testing
+  - Removing Fortify features cascades: must also remove all Vue pages that import auto-generated route helpers for those features
+  - Vite will fail to build if any .vue file imports from a non-existent auto-generated route module
+  - The `guest` middleware redirect target is controlled by `config/fortify.php` `home` setting (`/dashboard`)
+  - ProfileDeleteRequest still requires password — needs reworking when US-008 is implemented
+  - Pre-existing ESLint errors in auto-generated action/route files are harmless and gitignored
+
+---
+
+## 2026-02-15 - US-007
+- What was implemented:
+  - Post-OAuth email capture flow for users with private GitHub emails
+  - EnsureEmailProvided middleware redirects users without email to /email-capture on protected routes
+  - EmailCaptureController with show, store, and skip actions
+  - Email capture Vue page with clean form, explanation text, and "Skip for now" option
+  - GitHub callback redirects to email capture when GitHub provides no email
+  - Profile settings updated: email field is now optional (nullable) with helper text
+  - ProfileValidationRules updated: emailRules accepts `required` parameter
+  - ProfileUpdateRequest uses nullable email validation
+  - Email capture routes exempt from EnsureEmailProvided middleware (but require auth)
+  - Logout route also exempt from EnsureEmailProvided (users can always log out)
+  - 13 new tests covering: OAuth redirect with/without email, email capture render, submit, validation (format + uniqueness), skip, middleware redirect, logout access, dashboard access, profile email update/clear
+  - All 32 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - app/Http/Middleware/EnsureEmailProvided.php (new)
+  - app/Http/Controllers/Auth/EmailCaptureController.php (new)
+  - app/Http/Controllers/Auth/GitHubAuthController.php (updated: redirect to email capture when no email)
+  - app/Concerns/ProfileValidationRules.php (updated: nullable email support)
+  - app/Http/Requests/Settings/ProfileUpdateRequest.php (updated: email not required)
+  - resources/js/pages/auth/EmailCapture.vue (new)
+  - resources/js/pages/settings/Profile.vue (updated: optional email, helper text)
+  - routes/web.php (updated: email capture routes, EnsureEmailProvided middleware on protected routes)
+  - routes/settings.php (updated: EnsureEmailProvided middleware)
+  - tests/Feature/Auth/EmailCaptureTest.php (new: 13 tests)
+- **Learnings for future iterations:**
+  - EnsureEmailProvided middleware must exempt email-capture routes and logout to avoid redirect loops
+  - The `ConvertEmptyStringsToNull` middleware (Laravel default) converts empty email input to null automatically
+  - ProfileValidationRules trait is shared — changes to email rules affect both profile update and any other consumer
+  - UserFactory `withoutEmail()` state is useful for testing null-email scenarios
+  - Middleware-based redirect approach is cleaner than checking in every controller
 
 ---

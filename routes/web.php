@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Auth\EmailCaptureController;
 use App\Http\Controllers\Auth\GitHubAuthController;
+use App\Http\Middleware\EnsureEmailProvided;
 use App\Models\CachedProjectState;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -18,11 +20,18 @@ Route::middleware('guest')->group(function () {
 
 Route::post('logout', [GitHubAuthController::class, 'logout'])->middleware('auth')->name('logout');
 
+// Email capture routes (authenticated but before EnsureEmailProvided)
+Route::middleware(['auth'])->group(function () {
+    Route::get('email-capture', [EmailCaptureController::class, 'show'])->name('email-capture.show');
+    Route::post('email-capture', [EmailCaptureController::class, 'store'])->name('email-capture.store');
+    Route::post('email-capture/skip', [EmailCaptureController::class, 'skip'])->name('email-capture.skip');
+});
+
 Route::get('dashboard', function () {
     return Inertia::render('Dashboard');
-})->middleware(['auth'])->name('dashboard');
+})->middleware(['auth', EnsureEmailProvided::class])->name('dashboard');
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
     Route::get('/projects/{slug}', function (string $slug) {
         $project = CachedProjectState::where('project_slug', $slug)->firstOrFail();
 

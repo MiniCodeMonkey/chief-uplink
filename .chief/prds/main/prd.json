@@ -133,7 +133,8 @@
         "Subtle ambient animation on login page (e.g., gentle gradient shift or floating particles) — tasteful, not distracting"
       ],
       "priority": 6,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-007",
@@ -148,7 +149,8 @@
         "Email can be updated later from Settings → Account"
       ],
       "priority": 7,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-008",
