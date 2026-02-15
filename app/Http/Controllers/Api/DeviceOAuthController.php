@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\DeviceTokenRevoked;
 use App\Http\Controllers\Controller;
 use App\Models\CloudDeployment;
 use App\Models\DeviceAuthorization;
@@ -138,9 +139,10 @@ class DeviceOAuthController extends Controller
             ], 400);
         }
 
-        // Rotate the refresh token
+        // Rotate the refresh token — store previous hash for compromise detection
         $newRefreshToken = Str::random(64);
         $device->update([
+            'previous_refresh_token_hash' => $device->refresh_token_hash,
             'refresh_token_hash' => Hash::make($newRefreshToken),
             'last_ip' => $request->ip(),
         ]);
@@ -170,10 +172,7 @@ class DeviceOAuthController extends Controller
         $device = $this->findDeviceByRefreshToken($refreshToken);
 
         if ($device) {
-            $device->update([
-                'revoked_at' => now(),
-                'is_online' => false,
-            ]);
+            $this->revokeDevice($device);
         }
 
         // Always return 200 per OAuth 2.0 spec (even if token not found)
@@ -320,12 +319,36 @@ class DeviceOAuthController extends Controller
 
     /**
      * Handle potential token reuse (compromise detection).
-     * This is a no-op for now — in production, you'd check a revoked tokens table.
+     * If a previously-rotated refresh token is reused, revoke all tokens for that device.
      */
     private function handlePotentialTokenReuse(string $refreshToken): void
     {
-        // In a full implementation, you'd store previously-used refresh token hashes
-        // and if one is reused, revoke all tokens for that device family.
-        // For now, the invalid_grant error is sufficient protection.
+        // Check all non-revoked devices to see if this matches a previous refresh token
+        $devices = DeviceAuthorization::whereNull('revoked_at')
+            ->whereNotNull('previous_refresh_token_hash')
+            ->get();
+
+        foreach ($devices as $device) {
+            if (Hash::check($refreshToken, $device->previous_refresh_token_hash)) {
+                // A previously-used token was reused — potential compromise
+                // Revoke all tokens for this device
+                $this->revokeDevice($device);
+
+                return;
+            }
+        }
+    }
+
+    /**
+     * Revoke a device authorization and broadcast the revocation event.
+     */
+    private function revokeDevice(DeviceAuthorization $device): void
+    {
+        $device->update([
+            'revoked_at' => now(),
+            'is_online' => false,
+        ]);
+
+        DeviceTokenRevoked::dispatch($device->id, $device->user_id);
     }
 }

@@ -34,3 +34,24 @@ Route::post('/oauth/revoke', [DeviceOAuthController::class, 'revokeToken'])
 // Setup token exchange — VPS uses this to auto-authenticate
 Route::post('/oauth/device/exchange', [DeviceOAuthController::class, 'exchangeSetupToken'])
     ->name('oauth.device.exchange');
+
+/*
+|--------------------------------------------------------------------------
+| Authenticated Device API Routes
+|--------------------------------------------------------------------------
+|
+| Routes that require a valid device access token (used by chief servers).
+| The device.auth middleware validates the HMAC access token and checks
+| that the device has not been revoked.
+|
+*/
+
+Route::middleware('device.auth')->group(function () {
+    Route::get('/device/status', function (\Illuminate\Http\Request $request) {
+        return response()->json([
+            'authenticated' => true,
+            'device_id' => $request->input('authenticated_device_id'),
+            'user_id' => $request->input('authenticated_user_id'),
+        ]);
+    })->name('device.status');
+});

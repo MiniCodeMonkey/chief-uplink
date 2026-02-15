@@ -47,6 +47,13 @@
 - Rate limiters defined in `bootstrap/app.php` via `->booted()` callback using `RateLimiter::for()`
 - Refresh tokens stored as bcrypt hashes in `device_authorizations.refresh_token_hash` — lookup requires iterating all non-revoked devices
 - OauthDeviceCode user_code format: `XXXX-XXXX` (uppercase alphanumeric with hyphen)
+- Flash data shared via HandleInertiaRequests: `flash.success` from `session()->get('success')` — access in Vue via `usePage().props.flash`
+- Device code entry at `/oauth/device` — two-step verify → confirm → authorize/deny flow
+- `ValidateDeviceAccessToken` middleware (alias `device.auth`) validates HMAC access tokens + device revocation for API routes
+- Refresh token rotation stores `previous_refresh_token_hash` for compromise detection — reusing old token revokes device
+- `DeviceTokenRevoked` event broadcasts to `private-user.{userId}` and `private-device.{deviceId}` channels on revocation
+- Middleware aliases registered in `bootstrap/app.php` via `$middleware->alias()`
+- Broadcast channels authorized in `routes/channels.php` — `user.{userId}` and `device.{deviceId}`
 
 ---
 
@@ -365,5 +372,72 @@
   - The `Limit::perMinutes(15, 10)` syntax means 10 requests per 15 minutes — note argument order is (minutes, maxAttempts)
   - API routes automatically get the `/api` prefix when registered via `withRouting(api: ...)`
   - OAuth 2.0 spec requires revocation endpoint to always return 200 even for invalid tokens
+
+---
+
+## 2026-02-15 - US-010
+- What was implemented:
+  - Device code entry page at /oauth/device — accessible to authenticated users only
+  - Clean, focused UI with large code input field (XXXX-XXXX format), auto-formatting, uppercase-only
+  - Auto-focus on input field on page load
+  - Paste support (handles ABCD-1234 or ABCD1234 formats, auto-formats correctly)
+  - Code verification validates code exists, is pending, and not expired
+  - Confirmation page shows device name and user_code with Authorize/Deny buttons
+  - On authorize: marks code as approved, creates device_authorizations record via polling flow, shows success message with device name
+  - On deny: marks code as denied
+  - Invalid/expired codes show inline error with clear message
+  - Rate limiting: 10 code entry attempts per user per 15 minutes (brute-force protection)
+  - Success state with green checkmark animation and "Authorize another device" button
+  - Flash data shared via Inertia HandleInertiaRequests middleware (flash.success)
+  - 17 tests covering: page access, code verification (valid/invalid/expired/case-insensitive), confirmation page, authorize/deny, rate limiting, and full end-to-end integration flow
+  - All 85 tests passing, Pint clean, ESLint clean
+- Files changed:
+  - app/Http/Controllers/Auth/DeviceCodeEntryController.php (new: show, verify, confirm, authorize, deny)
+  - resources/js/pages/auth/DeviceCodeEntry.vue (new: code entry, confirmation, and success states)
+  - routes/web.php (updated: device code entry routes with rate limiting)
+  - bootstrap/app.php (updated: device-code-entry rate limiter — 10 per 15 minutes per user)
+  - app/Http/Middleware/HandleInertiaRequests.php (updated: flash data sharing)
+  - resources/js/types/global.d.ts (updated: flash type in shared page props)
+  - tests/Feature/Auth/DeviceCodeEntryTest.php (new: 17 tests)
+- **Learnings for future iterations:**
+  - Flash data must be explicitly shared via HandleInertiaRequests — `session()->get('success')` into `flash.success`
+  - OauthDeviceCode queries filter by `status: 'pending'` to avoid showing already-approved/denied codes
+  - Device code entry uses a two-step flow: verify (POST) → redirect to confirm page (GET) → authorize/deny (POST)
+  - Rate limiting on web routes uses the same `throttle:` middleware pattern as API routes
+  - Inertia's `usePage().props.flash` provides typed access to flash data in Vue components
+
+---
+
+## 2026-02-15 - US-011
+- What was implemented:
+  - Access token validation middleware (`ValidateDeviceAccessToken`) for WebSocket/API connections
+  - Middleware validates HMAC-signed access tokens, checks device revocation status, attaches device/user to request
+  - Refresh token rotation now stores previous token hash (`previous_refresh_token_hash`) for compromise detection
+  - Compromise detection: if a previously-rotated refresh token is reused, the device is automatically revoked
+  - `DeviceTokenRevoked` broadcast event dispatched on any revocation (via revoke endpoint or compromise detection)
+  - Event broadcasts to `private-user.{userId}` and `private-device.{deviceId}` channels for WebSocket connection closure
+  - Broadcast channel authorization for `user.{userId}` and `device.{deviceId}` channels
+  - `device.auth` middleware alias registered for use on authenticated device API routes
+  - Example authenticated device route (`GET /api/device/status`) demonstrating middleware usage
+  - Migration adding `previous_refresh_token_hash` column to `device_authorizations`
+  - 20 comprehensive tests covering: middleware (valid/missing/invalid/expired/revoked tokens), token rotation (stores previous hash, old token invalidation, chain rotation), compromise detection (revokes correct device, doesn't affect others), revocation events (dispatched/not dispatched), performance (sub-1ms validation), event broadcasting (correct channels/name)
+  - All 105 tests passing, Pint clean, ESLint clean
+- Files changed:
+  - database/migrations/2026_02_15_000008_add_previous_refresh_token_hash_to_device_authorizations.php (new)
+  - app/Http/Middleware/ValidateDeviceAccessToken.php (new)
+  - app/Events/DeviceTokenRevoked.php (new)
+  - app/Http/Controllers/Api/DeviceOAuthController.php (updated: compromise detection, revokeDevice helper, event dispatch, previous token hash storage)
+  - app/Models/DeviceAuthorization.php (updated: previous_refresh_token_hash in fillable)
+  - bootstrap/app.php (updated: device.auth middleware alias, ValidateDeviceAccessToken import)
+  - routes/api.php (updated: authenticated device route group with device.auth middleware)
+  - routes/channels.php (updated: user.{userId} and device.{deviceId} channel authorization)
+  - tests/Feature/Api/TokenRefreshRevocationTest.php (new: 20 tests)
+- **Learnings for future iterations:**
+  - `ValidateDeviceAccessToken` middleware checks HMAC signature + device revocation status on every request — no DB write, just a read
+  - Compromise detection stores `previous_refresh_token_hash` — only the most recent previous token triggers revocation, older ones are forgotten
+  - `DeviceTokenRevoked` event implements `ShouldBroadcast` — broadcasts to user and device channels for immediate WebSocket disconnection
+  - Middleware alias `device.auth` registered in `bootstrap/app.php` via `$middleware->alias()`
+  - HMAC token validation (base64 decode + hash_hmac) is sub-1ms per check — no DB hit required for access token validation
+  - Broadcast channels `user.{userId}` and `device.{deviceId}` authorize based on user ownership
 
 ---

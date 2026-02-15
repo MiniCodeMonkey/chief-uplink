@@ -20,6 +20,7 @@ class DeviceAuthorization extends Model
         'arch',
         'chief_version',
         'refresh_token_hash',
+        'previous_refresh_token_hash',
         'last_ip',
         'last_connected_at',
         'is_online',

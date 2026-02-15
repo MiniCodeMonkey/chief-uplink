@@ -206,7 +206,8 @@
         "Smooth success animation on authorization"
       ],
       "priority": 10,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-011",
@@ -220,7 +221,8 @@
         "Token validation is performant (sub-10ms for access token checks)"
       ],
       "priority": 11,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-012",
