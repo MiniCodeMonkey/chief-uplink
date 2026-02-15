@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\DeviceController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Middleware\EnsureEmailProvided;
 use Illuminate\Support\Facades\Route;
@@ -13,6 +14,9 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
     Route::delete('settings/profile', [ProfileController::class, 'destroy'])
         ->middleware('throttle:1,60')
         ->name('profile.destroy');
+
+    Route::get('settings/devices', [DeviceController::class, 'index'])->name('devices.index');
+    Route::delete('settings/devices/{id}', [DeviceController::class, 'destroy'])->name('devices.destroy');
 
     Route::get('settings/appearance', function () {
         return Inertia::render('settings/Appearance');

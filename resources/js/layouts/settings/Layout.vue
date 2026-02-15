@@ -6,6 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import { toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
+import { index as indexDevices } from '@/routes/devices';
 import { edit as editProfile } from '@/routes/profile';
 import { type NavItem } from '@/types';
 
@@ -13,6 +14,10 @@ const sidebarNavItems: NavItem[] = [
     {
         title: 'Profile',
         href: editProfile(),
+    },
+    {
+        title: 'Devices',
+        href: indexDevices(),
     },
     {
         title: 'Appearance',
