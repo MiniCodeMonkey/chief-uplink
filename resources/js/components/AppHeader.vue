@@ -2,6 +2,7 @@
 import { usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import BreadcrumbPicker from '@/components/BreadcrumbPicker.vue';
+import ConnectionStatusIndicator from '@/components/ConnectionStatusIndicator.vue';
 import KeyboardShortcutsOverlay from '@/components/KeyboardShortcutsOverlay.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -29,8 +30,9 @@ const showShortcuts = ref(false);
             <!-- Left: Breadcrumb picker -->
             <BreadcrumbPicker :current-project-slug="currentProjectSlug" />
 
-            <!-- Right: User avatar dropdown -->
-            <div class="flex items-center">
+            <!-- Right: Connection status + User avatar dropdown -->
+            <div class="flex items-center gap-2">
+                <ConnectionStatusIndicator />
                 <DropdownMenu>
                     <DropdownMenuTrigger :as-child="true">
                         <Button

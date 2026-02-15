@@ -275,7 +275,8 @@
         "On reconnect, missed messages are replayed from Redis buffer"
       ],
       "priority": 14,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-015",

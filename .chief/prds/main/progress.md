@@ -520,5 +520,42 @@
   - `openBuffer()` must be called after setting up `onMessage`, `onClose`, and `withMaxMessageSize` on the Connection
   - DeviceConnected/DeviceDisconnected events only broadcast to `private-user.{userId}` (not device channel) since browsers subscribe to user channels
   - Service providers must be explicitly listed in `bootstrap/providers.php` in Laravel 12 — auto-discovery only works for package providers
+- Broadcast auth route registered via `withBroadcasting()` in `bootstrap/app.php` (not `Broadcast::routes()` in web.php) — pass `['middleware' => ['web', 'auth']]` for authenticated channels
+- Echo composables: `useEcho()` for channel subscriptions, `useEchoConnectionStatus()` for connection state, `useDeviceStatus()` for real-time device updates
+- Inertia lazy props (`fn () =>`) are resolved by Inertia — access in tests via `assertInertia(fn ($page) => $page->toArray()['props']['devices'])`
+
+---
+
+## 2026-02-15 - US-014
+- What was implemented:
+  - Laravel Echo configured in Vue frontend connecting to Reverb (already set up, enhanced)
+  - `useEcho` composable: manages Echo channel subscriptions (user + device private channels), tracks connection state (connected/reconnecting/disconnected), binds Pusher connection events
+  - `useEchoConnectionStatus` composable: read-only access to Echo connection state with computed booleans
+  - `useDeviceStatus` composable: subscribes to `private-user.{userId}` channel, listens for `device.connected`, `device.disconnected`, `device.token.revoked` events, triggers Inertia `router.reload()` for fresh data
+  - Disconnect debouncing: 2-second delay before showing reconnecting state (prevents flicker on brief blips)
+  - Auto-reconnect: Pusher.js handles exponential backoff natively; `useDeviceStatus` re-subscribes and reloads data on reconnect
+  - `ConnectionStatusIndicator` component: shows reconnecting/disconnected status in header (hidden when connected)
+  - AppHeader updated: shows ConnectionStatusIndicator next to user avatar dropdown
+  - AppLayout and ProjectLayout: both initialize `useDeviceStatus()` for real-time updates
+  - Broadcast auth route: `/broadcasting/auth` with `auth` middleware (via `withBroadcasting()` in bootstrap/app.php)
+  - 21 comprehensive tests covering: broadcast auth (auth/unauth), channel authorization (user + device channels), broadcast events (channels, payload, ShouldBroadcast), Inertia connection status props (online/offline/reconnecting/never-connected, revoked exclusion, user scoping, metadata)
+  - All 166 tests passing, Pint clean, ESLint clean, build passing
+- Files changed:
+  - bootstrap/app.php (updated: moved channels from withRouting to withBroadcasting with auth middleware)
+  - resources/js/composables/useEcho.ts (new: Echo channel management + connection status tracking)
+  - resources/js/composables/useDeviceStatus.ts (new: real-time device status via WebSocket events)
+  - resources/js/components/ConnectionStatusIndicator.vue (new: visual indicator for Echo connection state)
+  - resources/js/components/AppHeader.vue (updated: added ConnectionStatusIndicator)
+  - resources/js/layouts/AppLayout.vue (updated: initialized useDeviceStatus)
+  - resources/js/layouts/ProjectLayout.vue (updated: initialized useDeviceStatus)
+  - tests/Feature/Broadcasting/BroadcastChannelAuthTest.php (new: 21 tests)
+- **Learnings for future iterations:**
+  - `Broadcast::routes()` called via `withRouting(channels: ...)` defaults to `['middleware' => ['web']]` without auth — must use `withBroadcasting()` separately with explicit middleware attributes
+  - The `channels` parameter in `withRouting()` calls `withBroadcasting($channels)` internally with no attributes — to add `auth` middleware, remove `channels` from `withRouting()` and call `withBroadcasting()` directly
+  - Pusher.js handles reconnection with exponential backoff natively — no need to implement custom reconnection logic
+  - Pusher connection states: `connected`, `connecting`, `reconnecting`, `unavailable`, `failed`, `disconnected` — bind to these on `pusher.connection`
+  - ESLint requires `default` case in computed property `switch` statements even when all cases are covered (vue/return-in-computed-property rule)
+  - Inertia lazy props (`fn () =>`) are resolved automatically — in tests, access via `assertInertia(fn ($page) => $page->toArray()['props']['devices'])` not `$response->original->getData()['page']['props']['devices']()`
+  - The `null` broadcast driver in tests (`phpunit.xml`) always returns success for channel auth — test channel authorization logic via HTTP endpoints instead
 
 ---

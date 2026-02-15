@@ -2,6 +2,9 @@
 import AppContent from '@/components/AppContent.vue';
 import AppHeader from '@/components/AppHeader.vue';
 import ProjectTabBar from '@/components/ProjectTabBar.vue';
+import { useDeviceStatus } from '@/composables/useDeviceStatus';
+
+useDeviceStatus();
 
 const props = defineProps<{
     projectSlug: string;

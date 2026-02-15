@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import AppContent from '@/components/AppContent.vue';
 import AppHeader from '@/components/AppHeader.vue';
+import { useDeviceStatus } from '@/composables/useDeviceStatus';
+
+useDeviceStatus();
 </script>
 
 <template>
