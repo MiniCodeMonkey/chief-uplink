@@ -60,7 +60,8 @@
         "Seeded data includes projects at different stages: one mid-run with story progress, one completed, one failed, one with no PRD"
       ],
       "priority": 3,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-004",
