@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\DeviceCodeEntryController;
 use App\Http\Controllers\Auth\EmailCaptureController;
 use App\Http\Controllers\Auth\GitHubAuthController;
 use App\Http\Middleware\EnsureEmailProvided;
@@ -32,6 +33,15 @@ Route::get('dashboard', function () {
 })->middleware(['auth', EnsureEmailProvided::class])->name('dashboard');
 
 Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
+    // Device code entry routes
+    Route::get('/oauth/device', [DeviceCodeEntryController::class, 'show'])->name('oauth.device');
+    Route::post('/oauth/device/verify', [DeviceCodeEntryController::class, 'verify'])
+        ->middleware('throttle:device-code-entry')
+        ->name('oauth.device.verify');
+    Route::get('/oauth/device/confirm/{code}', [DeviceCodeEntryController::class, 'confirm'])->name('oauth.device.confirm');
+    Route::post('/oauth/device/authorize', [DeviceCodeEntryController::class, 'authorize'])->name('oauth.device.authorize');
+    Route::post('/oauth/device/deny', [DeviceCodeEntryController::class, 'deny'])->name('oauth.device.deny');
+
     Route::get('/projects/{slug}', function (string $slug) {
         $project = CachedProjectState::where('project_slug', $slug)->firstOrFail();
 

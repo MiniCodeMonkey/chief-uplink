@@ -37,6 +37,11 @@ return Application::configure(basePath: dirname(__DIR__))
         RateLimiter::for('token-refresh', function (Request $request) {
             return Limit::perHour(30)->by($request->ip());
         });
+
+        // Device code entry: 10 attempts per user per 15 minutes
+        RateLimiter::for('device-code-entry', function (Request $request) {
+            return Limit::perMinutes(15, 10)->by($request->user()?->id ?: $request->ip());
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
