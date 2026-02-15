@@ -54,6 +54,13 @@
 - `DeviceTokenRevoked` event broadcasts to `private-user.{userId}` and `private-device.{deviceId}` channels on revocation
 - Middleware aliases registered in `bootstrap/app.php` via `$middleware->alias()`
 - Broadcast channels authorized in `routes/channels.php` — `user.{userId}` and `device.{deviceId}`
+- WebSocket: Chief servers connect via custom Reverb route at `/ws/server` — auth via hello message, not URL token
+- `ServerConnectionManager` singleton tracks active WebSocket connections — registered in `WebSocketServiceProvider`
+- `ChiefReverbFactory` extends Reverb's Factory to add custom `/ws/server` route alongside standard Pusher routes
+- `StartReverbServer` command overrides `reverb:start` to use custom factory — includes token refresh periodic checks
+- `DeviceConnected`/`DeviceDisconnected` events broadcast to `private-user.{userId}` channel
+- `ChiefServerController` handles WebSocket lifecycle: hello auth → welcome response → message routing → disconnect cleanup
+- Service providers registered in `bootstrap/providers.php` (not discovered automatically)
 
 ---
 
@@ -439,5 +446,79 @@
   - Middleware alias `device.auth` registered in `bootstrap/app.php` via `$middleware->alias()`
   - HMAC token validation (base64 decode + hash_hmac) is sub-1ms per check — no DB hit required for access token validation
   - Broadcast channels `user.{userId}` and `device.{deviceId}` authorize based on user ownership
+- Settings pages use SettingsLayout with sidebar nav — add new nav items to `resources/js/layouts/settings/Layout.vue`
+- Settings routes defined in `routes/settings.php` — all use `auth` + `EnsureEmailProvided` middleware
+- Device deauthorization pattern: set `revoked_at` + `is_online=false`, dispatch `DeviceTokenRevoked` event
+
+---
+
+## 2026-02-15 - US-012
+- What was implemented:
+  - Settings → Devices page listing all authorized (non-revoked) devices for the current user
+  - DeviceController with index (list) and destroy (deauthorize) actions
+  - Device list shows: name, OS (formatted), architecture, Chief version, last connected time (relative), last connected IP, online/offline status dot
+  - Online devices sorted before offline devices, then by last connected time
+  - Green status dot for online devices, gray for offline (using existing StatusDot component)
+  - "Deauthorize" button per device with ConfirmDialog (destructive variant)
+  - Deauthorizing revokes the refresh token (sets revoked_at), marks device offline, dispatches DeviceTokenRevoked event for WebSocket disconnection
+  - Smooth exit animation on deauthorization (TransitionGroup with scale/opacity/translate)
+  - Empty state with Monitor icon: "No devices authorized. Run `chief login` on your machine to get started."
+  - Devices nav item added to settings sidebar navigation (Profile → Devices → Appearance)
+  - Success flash message displayed after deauthorization
+  - 13 comprehensive tests covering: page display, device listing, revoked device exclusion, user scoping, empty state, sort order, deauthorize action, event dispatch, authorization checks (other user's device, already revoked), success message, authentication requirements
+  - All 118 tests passing, Pint clean, ESLint clean
+- Files changed:
+  - app/Http/Controllers/Settings/DeviceController.php (new: index + destroy actions)
+  - resources/js/pages/settings/Devices.vue (new: device list UI with deauthorize flow)
+  - resources/js/layouts/settings/Layout.vue (updated: added Devices nav item)
+  - routes/settings.php (updated: added devices.index and devices.destroy routes)
+  - tests/Feature/Settings/DeviceManagementTest.php (new: 13 tests)
+- **Learnings for future iterations:**
+  - Settings nav items use auto-generated route imports (e.g., `import { index as indexDevices } from '@/routes/devices'`)
+  - Device deauthorization reuses the same pattern as DeviceOAuthController::revokeDevice — update revoked_at + is_online, dispatch DeviceTokenRevoked event
+  - The controller scopes queries to `$request->user()->deviceAuthorizations()` to prevent cross-user access
+  - `whereNull('revoked_at')` + `findOrFail($id)` provides both ownership check and revocation check — returns 404 for other users' devices or already-revoked devices
+  - `router.delete()` from Inertia handles the DELETE request and automatic page refresh — no need for manual `useForm` for simple delete actions
+  - Flash success messages are shared via HandleInertiaRequests middleware and accessible via `usePage().props.flash`
+
+---
+
+## 2026-02-15 - US-013
+- What was implemented:
+  - Laravel Reverb configured with custom WebSocket route for chief server connections at `/ws/server`
+  - Custom `ChiefReverbFactory` extends Reverb's `Factory` to add chief server WebSocket route alongside standard Pusher protocol routes
+  - Custom `StartReverbServer` command overrides `reverb:start` to use the custom factory and add periodic token refresh checks
+  - `ChiefServerController` handles WebSocket lifecycle: processes hello/welcome auth protocol, routes messages, handles disconnections
+  - `ServerConnectionManager` singleton service tracks active connections: hello auth validation, device-to-connection mapping, disconnect cleanup, token expiry tracking
+  - Authentication via first message (hello): validates HMAC-signed access token, resolves to user/device, rejects invalid/expired/revoked tokens
+  - On valid hello: responds with welcome message containing connection_id and device_id, marks device online, stores chief_version/os/arch in device_authorizations
+  - On invalid/expired/revoked token: responds with auth_failed message and closes connection
+  - Rejects (ignores and logs) any messages received before a valid hello
+  - Token refresh check: periodic timer detects connections with tokens expiring within 5 minutes
+  - On disconnection: device status updated to offline, last_connected_at updated
+  - `DeviceConnected` broadcast event dispatched on successful hello — broadcasts to `private-user.{userId}` channel
+  - `DeviceDisconnected` broadcast event dispatched on disconnect — broadcasts to `private-user.{userId}` channel
+  - `WebSocketServiceProvider` registered in `bootstrap/providers.php` — registers `ServerConnectionManager` singleton
+  - 27 comprehensive tests covering: hello/welcome protocol (valid auth, missing token, invalid token, expired token, revoked device, non-hello type), device status updates (online/offline, metadata storage), connection tracking (auth state, disconnect cleanup, reconnection handling, multiple devices, device disconnect by ID), token refresh detection (expiring tokens, fresh tokens, already expired), broadcast events (correct channels, correct event names, not dispatched on failure), message handling before auth
+  - All 145 tests passing, Pint clean, ESLint clean (pre-existing errors only), build passing
+- Files changed:
+  - app/WebSocket/ChiefServerController.php (new: WebSocket connection handler with hello/welcome protocol)
+  - app/WebSocket/ChiefReverbFactory.php (new: extends Reverb Factory with custom /ws/server route)
+  - app/Services/ServerConnectionManager.php (new: singleton tracking active WebSocket connections)
+  - app/Console/Commands/StartReverbServer.php (new: overrides reverb:start with custom factory and token refresh checks)
+  - app/Events/DeviceConnected.php (new: broadcast event for device coming online)
+  - app/Events/DeviceDisconnected.php (new: broadcast event for device going offline)
+  - app/Providers/WebSocketServiceProvider.php (new: registers ServerConnectionManager singleton)
+  - bootstrap/providers.php (updated: added WebSocketServiceProvider)
+  - tests/Feature/WebSocket/ServerConnectionTest.php (new: 27 tests)
+- **Learnings for future iterations:**
+  - Reverb's Factory uses static methods with late static binding — override `pusherRoutes()` in a child class and call `ChildFactory::make()` to add custom routes
+  - `StartServer` command calls `ServerFactory::make()` statically — can't inject via container, must override the command
+  - Custom Artisan commands with `#[AsCommand(name: 'reverb:start')]` override Reverb's built-in command due to auto-discovery loading app commands after package commands
+  - The Reverb `Connection` class wraps ReactPHP connections — `id()` returns a unique integer, `send()` sends WebSocket frames, `close()` terminates
+  - WebSocket controller receives `RequestInterface` and `Connection` after the Router handles the WS upgrade handshake
+  - `openBuffer()` must be called after setting up `onMessage`, `onClose`, and `withMaxMessageSize` on the Connection
+  - DeviceConnected/DeviceDisconnected events only broadcast to `private-user.{userId}` (not device channel) since browsers subscribe to user channels
+  - Service providers must be explicitly listed in `bootstrap/providers.php` in Laravel 12 — auto-discovery only works for package providers
 
 ---

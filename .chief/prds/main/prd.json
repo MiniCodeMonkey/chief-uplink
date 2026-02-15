@@ -258,7 +258,8 @@
         "Connection events (connect/disconnect) are broadcast to the user's browser channel"
       ],
       "priority": 13,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-014",
