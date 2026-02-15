@@ -18,15 +18,52 @@ defineProps<Props>();
 
 const page = usePage();
 const user = page.props.auth.user;
+
+const memberSince = new Date(user.created_at).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+});
 </script>
 
 <template>
     <AppLayout>
-        <Head title="Profile settings" />
+        <Head title="Account settings" />
 
-        <h1 class="sr-only">Profile Settings</h1>
+        <h1 class="sr-only">Account Settings</h1>
 
         <SettingsLayout>
+            <div class="flex flex-col space-y-6">
+                <Heading
+                    variant="small"
+                    title="Account"
+                    description="Your GitHub account information"
+                />
+
+                <div class="flex items-center gap-4">
+                    <img
+                        v-if="user.avatar_url"
+                        :src="user.avatar_url"
+                        :alt="`${user.github_username}'s avatar`"
+                        class="h-16 w-16 rounded-full border border-border"
+                    />
+                    <div
+                        v-else
+                        class="bg-muted text-muted-foreground flex h-16 w-16 items-center justify-center rounded-full border border-border text-xl font-medium"
+                    >
+                        {{ (user.github_username || user.name || '?').charAt(0).toUpperCase() }}
+                    </div>
+                    <div>
+                        <p class="font-medium text-foreground">
+                            {{ user.github_username }}
+                        </p>
+                        <p class="text-sm text-muted-foreground">
+                            Member since {{ memberSince }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             <div class="flex flex-col space-y-6">
                 <Heading
                     variant="small"

@@ -10,7 +10,9 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
 
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('settings/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::delete('settings/profile', [ProfileController::class, 'destroy'])
+        ->middleware('throttle:1,60')
+        ->name('profile.destroy');
 
     Route::get('settings/appearance', function () {
         return Inertia::render('settings/Appearance');

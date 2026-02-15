@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileDeleteRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,7 +19,6 @@ class ProfileController extends Controller
     public function edit(Request $request): Response
     {
         return Inertia::render('settings/Profile', [
-            'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => $request->session()->get('status'),
         ]);
     }
@@ -48,6 +46,20 @@ class ProfileController extends Controller
     {
         $user = $request->user();
 
+        // Revoke all device tokens
+        $user->deviceAuthorizations()->update(['revoked_at' => now()]);
+
+        // Destroy active cloud servers (mark as destroyed)
+        $user->cloudDeployments()
+            ->whereNotIn('status', ['destroyed'])
+            ->update(['status' => 'destroyed']);
+
+        // Remove personal data before soft delete
+        $user->email = null;
+        $user->avatar_url = null;
+        $user->notification_preferences = null;
+        $user->save();
+
         Auth::logout();
 
         $user->delete();
@@ -55,6 +67,6 @@ class ProfileController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect('/');
+        return redirect('/login')->with('status', 'Account deleted');
     }
 }

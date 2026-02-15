@@ -166,7 +166,8 @@
         "Rate limit account deletion to prevent abuse (1 attempt per hour)"
       ],
       "priority": 8,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-009",
