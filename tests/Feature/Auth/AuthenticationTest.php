@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\User;
-use Illuminate\Support\Facades\RateLimiter;
-use Laravel\Fortify\Features;
+use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\User as SocialiteUser;
 
 test('login screen can be rendered', function () {
     $response = $this->get(route('login'));
@@ -10,55 +10,79 @@ test('login screen can be rendered', function () {
     $response->assertOk();
 });
 
-test('users can authenticate using the login screen', function () {
-    $user = User::factory()->create();
+test('login screen renders correct inertia component', function () {
+    $response = $this->get(route('login'));
 
-    $response = $this->post(route('login.store'), [
-        'email' => $user->email,
-        'password' => 'password',
-    ]);
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page->component('auth/Login'));
+});
+
+test('github redirect works', function () {
+    $response = $this->get(route('auth.github'));
+
+    $response->assertRedirect();
+    expect($response->headers->get('Location'))->toContain('github.com');
+});
+
+test('github callback creates new user', function () {
+    mockSocialiteDriver();
+
+    $response = $this->get(route('auth.github.callback'));
 
     $this->assertAuthenticated();
-    $response->assertRedirect(route('dashboard', absolute: false));
+    $response->assertRedirect(route('dashboard'));
+
+    $this->assertDatabaseHas('users', [
+        'github_id' => '12345',
+        'github_username' => 'testuser',
+    ]);
 });
 
-test('users with two factor enabled are redirected to two factor challenge', function () {
-    if (! Features::canManageTwoFactorAuthentication()) {
-        $this->markTestSkipped('Two-factor authentication is not enabled.');
-    }
-
-    Features::twoFactorAuthentication([
-        'confirm' => true,
-        'confirmPassword' => true,
+test('github callback logs in existing user', function () {
+    $existingUser = User::factory()->create([
+        'github_id' => '12345',
+        'github_username' => 'testuser',
     ]);
 
-    $user = User::factory()->create();
+    mockSocialiteDriver();
 
-    $user->forceFill([
-        'two_factor_secret' => encrypt('test-secret'),
-        'two_factor_recovery_codes' => encrypt(json_encode(['code1', 'code2'])),
-        'two_factor_confirmed_at' => now(),
-    ])->save();
+    $response = $this->get(route('auth.github.callback'));
 
-    $response = $this->post(route('login'), [
-        'email' => $user->email,
-        'password' => 'password',
-    ]);
-
-    $response->assertRedirect(route('two-factor.login'));
-    $response->assertSessionHas('login.id', $user->id);
-    $this->assertGuest();
+    $this->assertAuthenticatedAs($existingUser);
+    $response->assertRedirect(route('dashboard'));
 });
 
-test('users can not authenticate with invalid password', function () {
-    $user = User::factory()->create();
-
-    $this->post(route('login.store'), [
-        'email' => $user->email,
-        'password' => 'wrong-password',
+test('github callback updates user info on login', function () {
+    User::factory()->create([
+        'github_id' => '12345',
+        'github_username' => 'oldusername',
+        'avatar_url' => 'https://old-avatar.com/old.jpg',
     ]);
 
+    mockSocialiteDriver();
+
+    $this->get(route('auth.github.callback'));
+
+    $this->assertDatabaseHas('users', [
+        'github_id' => '12345',
+        'github_username' => 'testuser',
+        'avatar_url' => 'https://avatars.githubusercontent.com/u/12345',
+    ]);
+});
+
+test('github callback rejects soft-deleted users', function () {
+    $user = User::factory()->create([
+        'github_id' => '12345',
+        'github_username' => 'testuser',
+    ]);
+    $user->delete();
+
+    mockSocialiteDriver();
+
+    $response = $this->get(route('auth.github.callback'));
+
     $this->assertGuest();
+    $response->assertRedirect(route('login'));
 });
 
 test('users can logout', function () {
@@ -67,18 +91,41 @@ test('users can logout', function () {
     $response = $this->actingAs($user)->post(route('logout'));
 
     $this->assertGuest();
-    $response->assertRedirect(route('home'));
+    $response->assertRedirect(route('login'));
 });
 
-test('users are rate limited', function () {
+test('unauthenticated users are redirected to login', function () {
+    $response = $this->get(route('dashboard'));
+
+    $response->assertRedirect(route('login'));
+});
+
+test('authenticated users cannot visit login page', function () {
     $user = User::factory()->create();
 
-    RateLimiter::increment(md5('login'.implode('|', [$user->email, '127.0.0.1'])), amount: 5);
+    $response = $this->actingAs($user)->get(route('login'));
 
-    $response = $this->post(route('login.store'), [
-        'email' => $user->email,
-        'password' => 'wrong-password',
-    ]);
-
-    $response->assertTooManyRequests();
+    $response->assertRedirect(route('dashboard'));
 });
+
+function mockSocialiteDriver(): void
+{
+    $socialiteUser = new SocialiteUser;
+    $socialiteUser->id = '12345';
+    $socialiteUser->nickname = 'testuser';
+    $socialiteUser->name = 'Test User';
+    $socialiteUser->email = 'test@example.com';
+    $socialiteUser->avatar = 'https://avatars.githubusercontent.com/u/12345';
+
+    Socialite::shouldReceive('driver')
+        ->with('github')
+        ->andReturn(new class($socialiteUser)
+        {
+            public function __construct(private SocialiteUser $user) {}
+
+            public function user(): SocialiteUser
+            {
+                return $this->user;
+            }
+        });
+}

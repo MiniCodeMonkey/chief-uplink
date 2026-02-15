@@ -1,21 +1,28 @@
 <?php
 
+use App\Http\Controllers\Auth\GitHubAuthController;
 use App\Models\CachedProjectState;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use Laravel\Fortify\Features;
 
 Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canRegister' => Features::enabled(Features::registration()),
-    ]);
+    return redirect()->route('dashboard');
 })->name('home');
+
+// GitHub OAuth routes
+Route::middleware('guest')->group(function () {
+    Route::get('login', [GitHubAuthController::class, 'login'])->name('login');
+    Route::get('auth/github', [GitHubAuthController::class, 'redirect'])->name('auth.github');
+    Route::get('auth/github/callback', [GitHubAuthController::class, 'callback'])->name('auth.github.callback');
+});
+
+Route::post('logout', [GitHubAuthController::class, 'logout'])->middleware('auth')->name('logout');
 
 Route::get('dashboard', function () {
     return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+})->middleware(['auth'])->name('dashboard');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth'])->group(function () {
     Route::get('/projects/{slug}', function (string $slug) {
         $project = CachedProjectState::where('project_slug', $slug)->firstOrFail();
 
