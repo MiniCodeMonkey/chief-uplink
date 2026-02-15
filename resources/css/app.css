@@ -251,6 +251,28 @@
     .shake {
         animation: shake var(--duration-standard) var(--ease-snappy);
     }
+
+    /* Shimmer sweep for reconnect data refresh indication */
+    .shimmer-sweep {
+        position: relative;
+        overflow: hidden;
+    }
+    .shimmer-sweep::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+            90deg,
+            transparent 0%,
+            var(--primary, oklch(0.759 0.157 62.79)) 50%,
+            transparent 100%
+        );
+        opacity: 0.08;
+        background-size: 200% 100%;
+        animation: shimmer-sweep 1.5s var(--ease-gentle) forwards;
+        pointer-events: none;
+        border-radius: inherit;
+    }
 }
 
 @keyframes shimmer {
@@ -278,6 +300,15 @@
     }
 }
 
+@keyframes shimmer-sweep {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
 @keyframes pulse-dot {
     0%,
     100% {
@@ -298,7 +329,8 @@
         transition-duration: 0.01ms !important;
     }
 
-    .shimmer {
+    .shimmer,
+    .shimmer-sweep::after {
         animation: none;
     }
 }

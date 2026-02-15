@@ -3,6 +3,7 @@ import { usePage } from '@inertiajs/vue3';
 import { ChevronDown, Server } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { StatusDot } from '@/components/ui/status-dot';
+import { formatRelativeTime } from '@/composables/useConnectionStatus';
 import type { DeviceSummary } from '@/types';
 
 const props = defineProps<{
@@ -152,11 +153,11 @@ function handleKeydown(event: KeyboardEvent) {
                             "
                             class="text-xs text-muted-foreground"
                         >
-                            Last seen
+                            Offline — last synced
                             {{
-                                new Date(
+                                formatRelativeTime(
                                     device.last_connected_at,
-                                ).toLocaleDateString()
+                                )
                             }}
                         </span>
                         <span

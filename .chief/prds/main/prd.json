@@ -330,7 +330,8 @@
         "Transition to \"Reconnecting\" is debounced (2-second delay before showing yellow dot) to avoid flickering on brief network blips"
       ],
       "priority": 17,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-018",

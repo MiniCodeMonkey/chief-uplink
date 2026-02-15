@@ -10,8 +10,16 @@ interface DeviceEventPayload {
 const isListening = ref(false);
 const reconnectDebounceTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
+/**
+ * Set of device IDs that recently reconnected.
+ * Used to trigger shimmer animation on data cards indicating fresh data.
+ */
+const recentlyReconnected = ref<Set<number>>(new Set());
+const shimmerTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
 const RECONNECTING_DEBOUNCE_MS = 2000;
 const RECONNECTING_TIMEOUT_MS = 60000;
+const SHIMMER_DURATION_MS = 1500;
 
 export function useDeviceStatus() {
     const { subscribeToUserChannel, leaveUserChannel, connectionState } = useEcho();
@@ -23,6 +31,7 @@ export function useDeviceStatus() {
             'device.connected': (data: unknown) => {
                 const payload = data as DeviceEventPayload;
                 clearReconnectTimer(payload.deviceId);
+                triggerReconnectShimmer(payload.deviceId);
                 // Reload Inertia shared props to get fresh device list
                 router.reload({ only: ['devices'] });
             },
@@ -69,6 +78,29 @@ export function useDeviceStatus() {
         }
     }
 
+    /**
+     * Trigger a brief shimmer animation on device's data cards
+     * to indicate fresh data has arrived after reconnection.
+     */
+    function triggerReconnectShimmer(deviceId: number) {
+        // Clear any existing shimmer timer for this device
+        const existingTimer = shimmerTimers.get(deviceId);
+        if (existingTimer) {
+            clearTimeout(existingTimer);
+        }
+
+        recentlyReconnected.value = new Set([...recentlyReconnected.value, deviceId]);
+
+        const timer = setTimeout(() => {
+            shimmerTimers.delete(deviceId);
+            const next = new Set(recentlyReconnected.value);
+            next.delete(deviceId);
+            recentlyReconnected.value = next;
+        }, SHIMMER_DURATION_MS);
+
+        shimmerTimers.set(deviceId, timer);
+    }
+
     function stopListening() {
         if (!isListening.value) return;
         leaveUserChannel();
@@ -79,6 +111,12 @@ export function useDeviceStatus() {
             clearTimeout(timer);
         }
         reconnectDebounceTimers.clear();
+
+        // Clear shimmer timers
+        for (const [, timer] of shimmerTimers) {
+            clearTimeout(timer);
+        }
+        shimmerTimers.clear();
     }
 
     // Auto-start listening when mounted, auto-stop on unmount
@@ -104,6 +142,7 @@ export function useDeviceStatus() {
 
     return {
         isListening,
+        recentlyReconnected,
         startListening,
         stopListening,
     };

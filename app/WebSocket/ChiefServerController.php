@@ -3,6 +3,7 @@
 namespace App\WebSocket;
 
 use App\Events\ChiefMessageReceived;
+use App\Models\CachedProjectState;
 use App\Services\ServerConnectionManager;
 use Illuminate\Support\Facades\Log;
 use Laravel\Reverb\Servers\Reverb\Connection;
@@ -85,6 +86,11 @@ class ChiefServerController
         $userId = $this->connectionManager->getUserId($connectionId);
         $type = $message['type'] ?? 'unknown';
 
+        // Handle project_state messages: overwrite cached project state with fresh data
+        if ($type === 'project_state' && $deviceId) {
+            $this->handleProjectState($deviceId, $message);
+        }
+
         // Buffer the message for browser replay on reconnect
         $this->connectionManager->bufferMessage($deviceId, $message);
 
@@ -97,6 +103,67 @@ class ChiefServerController
             'connection_id' => $connectionId,
             'device_id' => $deviceId,
             'type' => $type,
+        ]);
+    }
+
+    /**
+     * Handle a project_state message from a chief server.
+     *
+     * Overwrites cached_project_state with fresh data from the server.
+     * The payload contains an array of projects with their current state.
+     */
+    protected function handleProjectState(int $deviceId, array $message): void
+    {
+        $projects = $message['payload']['projects'] ?? [];
+
+        if (! is_array($projects)) {
+            Log::warning('Invalid project_state payload from chief server', [
+                'device_id' => $deviceId,
+            ]);
+
+            return;
+        }
+
+        // Get slugs from the incoming data to know which projects to keep
+        $incomingSlugs = collect($projects)->pluck('project_slug')->filter()->toArray();
+
+        // Remove cached projects that are no longer reported by the server
+        CachedProjectState::where('device_authorization_id', $deviceId)
+            ->when(count($incomingSlugs) > 0, function ($query) use ($incomingSlugs) {
+                $query->whereNotIn('project_slug', $incomingSlugs);
+            })
+            ->delete();
+
+        // Upsert each project's state
+        foreach ($projects as $project) {
+            if (! is_array($project) || empty($project['project_slug'])) {
+                continue;
+            }
+
+            CachedProjectState::updateOrCreate(
+                [
+                    'device_authorization_id' => $deviceId,
+                    'project_slug' => $project['project_slug'],
+                ],
+                [
+                    'project_name' => $project['project_name'] ?? $project['project_slug'],
+                    'git_branch' => $project['git_branch'] ?? null,
+                    'last_commit_hash' => $project['last_commit_hash'] ?? null,
+                    'last_commit_message' => $project['last_commit_message'] ?? null,
+                    'status' => $project['status'] ?? 'idle',
+                    'current_prd_name' => $project['current_prd_name'] ?? null,
+                    'stories_completed' => $project['stories_completed'] ?? 0,
+                    'stories_total' => $project['stories_total'] ?? 0,
+                    'story_details' => $project['story_details'] ?? null,
+                    'active_sessions' => $project['active_sessions'] ?? 0,
+                    'recent_activity' => $project['recent_activity'] ?? null,
+                ]
+            );
+        }
+
+        Log::info('Project state updated from chief server', [
+            'device_id' => $deviceId,
+            'project_count' => count($projects),
         ]);
     }
 
