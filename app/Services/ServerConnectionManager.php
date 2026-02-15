@@ -7,12 +7,13 @@ use App\Events\DeviceDisconnected;
 use App\Http\Controllers\Api\DeviceOAuthController;
 use App\Models\DeviceAuthorization;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class ServerConnectionManager
 {
     /**
      * Active connections indexed by connection ID.
-     * Each entry contains: device_id, user_id, token_expires_at, connection
+     * Each entry contains: device_id, user_id, token_expires_at
      *
      * @var array<int, array{device_id: int, user_id: int, token_expires_at: int}>
      */
@@ -24,6 +25,13 @@ class ServerConnectionManager
      * @var array<int, int>
      */
     protected array $deviceToConnection = [];
+
+    /**
+     * Active session IDs indexed by device_id.
+     *
+     * @var array<int, string>
+     */
+    protected array $deviceSessions = [];
 
     /**
      * Process a "hello" message from a chief server connection.
@@ -99,6 +107,20 @@ class ServerConnectionManager
         ];
         $this->deviceToConnection[$deviceId] = $connectionId;
 
+        // Generate a session ID for message buffering
+        $sessionId = Str::uuid()->toString();
+        $this->deviceSessions[$deviceId] = $sessionId;
+
+        // Mark device as reconnected in the message buffer
+        try {
+            app(WebSocketMessageBuffer::class)->markReconnected($deviceId);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to mark device reconnected in buffer', [
+                'device_id' => $deviceId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         // Update device status and metadata
         $updateData = [
             'is_online' => true,
@@ -137,6 +159,7 @@ class ServerConnectionManager
                 'protocol_version' => 1,
                 'connection_id' => $connectionId,
                 'device_id' => $deviceId,
+                'session_id' => $sessionId,
             ],
         ];
     }
@@ -157,6 +180,16 @@ class ServerConnectionManager
         // Clean up connection tracking
         unset($this->connections[$connectionId]);
         unset($this->deviceToConnection[$deviceId]);
+
+        // Mark device as disconnected in the buffer (starts grace period)
+        try {
+            app(WebSocketMessageBuffer::class)->markDisconnected($deviceId);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to mark device disconnected in buffer', [
+                'device_id' => $deviceId,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         // Update device status
         $device = DeviceAuthorization::find($deviceId);
@@ -240,6 +273,37 @@ class ServerConnectionManager
     }
 
     /**
+     * Get the current session ID for a device.
+     */
+    public function getSessionId(int $deviceId): ?string
+    {
+        return $this->deviceSessions[$deviceId] ?? null;
+    }
+
+    /**
+     * Buffer a message from a chief server for browser replay.
+     */
+    public function bufferMessage(int $deviceId, array $message): bool
+    {
+        $sessionId = $this->deviceSessions[$deviceId] ?? null;
+        if (! $sessionId) {
+            return false;
+        }
+
+        try {
+            return app(WebSocketMessageBuffer::class)->buffer($deviceId, $sessionId, $message);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to buffer WebSocket message', [
+                'device_id' => $deviceId,
+                'type' => $message['type'] ?? 'unknown',
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
      * Remove a connection by device ID (e.g., when device is deauthorized).
      */
     public function disconnectDevice(int $deviceId): ?int
@@ -249,6 +313,9 @@ class ServerConnectionManager
             unset($this->connections[$connectionId]);
             unset($this->deviceToConnection[$deviceId]);
         }
+
+        // Clean up session tracking (don't flush buffer — let grace period handle it)
+        unset($this->deviceSessions[$deviceId]);
 
         return $connectionId;
     }

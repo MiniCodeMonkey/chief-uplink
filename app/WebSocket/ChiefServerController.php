@@ -77,11 +77,17 @@ class ChiefServerController
         }
 
         // Connection is authenticated — handle other message types
-        // These will be implemented in future user stories (US-016 WebSocket Message Relay)
+        $deviceId = $this->connectionManager->getDeviceId($connectionId);
+        $type = $message['type'] ?? 'unknown';
+
+        // Buffer the message for browser replay on reconnect
+        $this->connectionManager->bufferMessage($deviceId, $message);
+
+        // Message relay will be implemented in US-016
         Log::debug('Message from authenticated chief server', [
             'connection_id' => $connectionId,
-            'device_id' => $this->connectionManager->getDeviceId($connectionId),
-            'type' => $message['type'] ?? 'unknown',
+            'device_id' => $deviceId,
+            'type' => $type,
         ]);
     }
 

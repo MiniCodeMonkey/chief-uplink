@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\MessageBufferController;
 use App\Http\Controllers\Auth\DeviceCodeEntryController;
 use App\Http\Controllers\Auth\EmailCaptureController;
 use App\Http\Controllers\Auth\GitHubAuthController;
@@ -77,6 +78,9 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
             'projectName' => $project->project_name,
         ]);
     })->name('projects.prds');
+
+    // WebSocket message buffer replay (for browser reconnection)
+    Route::post('/ws/buffer/replay', [MessageBufferController::class, 'replay'])->name('ws.buffer.replay');
 });
 
 require __DIR__.'/settings.php';
