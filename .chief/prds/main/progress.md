@@ -61,6 +61,17 @@
 - `DeviceConnected`/`DeviceDisconnected` events broadcast to `private-user.{userId}` channel
 - `ChiefServerController` handles WebSocket lifecycle: hello auth → welcome response → message routing → disconnect cleanup
 - Service providers registered in `bootstrap/providers.php` (not discovered automatically)
+- Redis uses `predis/predis` (pure PHP client) — set `REDIS_CLIENT=predis` in `.env` when phpredis extension is unavailable
+- Laravel Redis facade adds `laravel-database-` prefix to keys — avoid `Redis::scan()` for key discovery, use sorted sets instead
+- WebSocket message buffer: `WebSocketMessageBuffer` service stores bufferable messages in Redis with key `ws:buffer:{device_id}:{session_id}`
+- Buffer config in `config/websocket.php` — `WS_BUFFER_MAX_SIZE` (default 5MB) and `WS_BUFFER_GRACE_PERIOD` (default 300s)
+- `ws:buffer:cleanup` Artisan command runs every minute via scheduler (defined in `routes/console.php`)
+- Replay API endpoint: `POST /ws/buffer/replay` (web route, session auth) — returns buffered messages for browser reconnect
+- Command relay: `POST /ws/command/{deviceId}` (web route, session auth) — browser sends commands to chief via WebSocket
+- `ChiefMessageReceived` event broadcasts chief messages to `private-device.{deviceId}` — browser subscribes via Echo
+- `ServerConnectionManager` stores Connection objects for sending messages to chief servers — `sendToDevice()` / `isDeviceOnline()`
+- Vue composables: `useCommandRelay` for sending commands, `useChiefMessages` for receiving chief events
+- Pest test files in same directory can't define functions with same name — use unique names per file
 
 ---
 
@@ -557,5 +568,79 @@
   - ESLint requires `default` case in computed property `switch` statements even when all cases are covered (vue/return-in-computed-property rule)
   - Inertia lazy props (`fn () =>`) are resolved automatically — in tests, access via `assertInertia(fn ($page) => $page->toArray()['props']['devices'])` not `$response->original->getData()['page']['props']['devices']()`
   - The `null` broadcast driver in tests (`phpunit.xml`) always returns success for channel auth — test channel authorization logic via HTTP endpoints instead
+
+---
+
+## 2026-02-15 - US-015
+- What was implemented:
+  - `WebSocketMessageBuffer` service: stores bufferable WebSocket messages in Redis with key pattern `ws:buffer:{device_id}:{session_id}`
+  - Bufferable message types: `claude_output`, `run_progress`, `run_complete`, `run_paused`, `clone_progress`, `session_timeout_warning`, `error`, `quota_exhausted`
+  - Non-bufferable types (`project_state`, `project_list`) are explicitly excluded — re-requested on reconnect
+  - Buffer cap: 5MB per session (configurable via `WS_BUFFER_MAX_SIZE` env var), oldest messages evicted when exceeded
+  - Disconnect/reconnect tracking: `markDisconnected()` starts grace period timer, `markReconnected()` clears it
+  - 5-minute grace period after chief server disconnects (configurable via `WS_BUFFER_GRACE_PERIOD`), then buffer is flushed
+  - Stale buffer cleanup via sorted set (`ws:disconnected_devices`) for efficient range queries — no Redis SCAN needed
+  - `ws:buffer:cleanup` Artisan command scheduled every minute for automatic cleanup
+  - `ServerConnectionManager` integration: generates session ID on hello, buffers messages from authenticated devices, marks disconnect/reconnect
+  - Welcome response now includes `session_id` for client tracking
+  - `ChiefServerController` automatically buffers all messages from authenticated chief servers
+  - Browser replay API: `POST /ws/buffer/replay` — accepts `device_id` and optional `session_id`, returns buffered messages in order
+  - Replay endpoint verifies device ownership (user must own the device) and rejects revoked devices
+  - `config/websocket.php` with configurable buffer_max_size and buffer_grace_period
+  - `predis/predis` added as composer dependency (pure PHP Redis client)
+  - 38 comprehensive tests covering: bufferable types, message buffering, replay (single session + all sessions), flushing (session + device), disconnect/reconnect tracking, buffer size cap enforcement, size/count tracking, stale cleanup, ServerConnectionManager integration (session ID, buffering, disconnect/reconnect), replay API (auth, validation, authorization), cleanup command
+  - All 204 tests passing (166 existing + 38 new), Pint clean, ESLint clean
+- Files changed:
+  - app/Services/WebSocketMessageBuffer.php (new: core buffer service)
+  - app/Services/ServerConnectionManager.php (updated: session tracking, buffer integration on hello/disconnect)
+  - app/WebSocket/ChiefServerController.php (updated: buffer messages from authenticated chief servers)
+  - app/Http/Controllers/Api/MessageBufferController.php (new: replay API endpoint)
+  - config/websocket.php (new: buffer configuration)
+  - routes/console.php (updated: ws:buffer:cleanup command + scheduled task)
+  - routes/web.php (updated: POST /ws/buffer/replay route)
+  - composer.json, composer.lock (updated: added predis/predis)
+  - tests/Feature/WebSocket/MessageBufferTest.php (new: 38 tests)
+- **Learnings for future iterations:**
+  - Laravel's Redis facade adds a `laravel-database-` prefix to all keys — `Redis::scan()` with `match` doesn't auto-prefix, causing key mismatches. Use sorted sets (`ZADD`/`ZRANGEBYSCORE`) instead of SCAN for tracking disconnected devices.
+  - `predis/predis` is a pure PHP Redis client — use when phpredis extension is not available. Set `REDIS_CLIENT=predis` in `.env`.
+  - The `WS_BUFFER_MAX_SIZE` and `WS_BUFFER_GRACE_PERIOD` env vars were already in `.env.example` from US-001 scaffolding.
+  - Pest test files in the same directory can't define functions with the same name — use unique function names per test file (e.g., `generateBufferTestAccessToken` vs `generateTestAccessToken`).
+  - `ServerConnectionManager` is a singleton — adding state (`$deviceSessions`) persists across the WebSocket server's lifetime.
+  - Redis `ZADD` with timestamp as score + `ZRANGEBYSCORE` with `-inf` to cutoff is much more reliable than SCAN for finding expired entries.
+
+---
+
+## 2026-02-15 - US-016
+- What was implemented:
+  - Bidirectional WebSocket message relay between browser and chief servers
+  - Browser → Chief: `CommandRelayController` (POST `/ws/command/{deviceId}`) validates ownership, command type, and device online status, then sends JSON via WebSocket Connection object
+  - Chief → Browser: `ChiefMessageReceived` broadcast event dispatched on every authenticated chief message, broadcasts to `private-device.{deviceId}` channel
+  - `ServerConnectionManager` enhanced: stores Connection objects (`connectionObjects`), `sendToDevice()` method for sending messages, `isDeviceOnline()` for checking active connections, cleanup on disconnect/deauthorize
+  - `ChiefServerController` updated: registers connection objects on connect, broadcasts `ChiefMessageReceived` event after buffering messages
+  - 13 valid command types: start_run, pause_run, resume_run, stop_run, new_prd, prd_message, close_prd_session, clone_repo, create_project, get_logs, get_diffs, get_settings, update_settings
+  - Invalid/malformed messages from chief are logged and discarded (no crash)
+  - Rate limiting: 60 commands per user per minute (`browser-commands` rate limiter)
+  - Offline device handling: returns 503 "Server offline" error
+  - Vue composables: `useCommandRelay` (send commands, debounce, error handling, RATE_LIMITED auto-retry), `useChiefMessages` (subscribe to device channel, receive chief events, handle RATE_LIMITED with toast)
+  - 32 comprehensive tests covering: command relay (valid/invalid/offline/revoked/auth), event broadcasting (channels, payload, event name), message sending (success, failure, online status), connection cleanup (disconnect, deauthorize), rate limiting (60/min enforcement, headers), command validation
+  - All 236 tests passing, Pint clean, ESLint clean, build passing
+- Files changed:
+  - app/Events/ChiefMessageReceived.php (new: broadcast event for chief → browser relay)
+  - app/Http/Controllers/Api/CommandRelayController.php (new: HTTP endpoint for browser → chief commands)
+  - app/Services/ServerConnectionManager.php (updated: connection objects, sendToDevice, isDeviceOnline)
+  - app/WebSocket/ChiefServerController.php (updated: registers connection objects, broadcasts events)
+  - bootstrap/app.php (updated: browser-commands rate limiter)
+  - routes/web.php (updated: POST /ws/command/{deviceId} route)
+  - resources/js/composables/useCommandRelay.ts (new: send commands, debounce, error handling)
+  - resources/js/composables/useChiefMessages.ts (new: receive chief events, handle RATE_LIMITED)
+  - tests/Feature/WebSocket/MessageRelayTest.php (new: 32 tests)
+- **Learnings for future iterations:**
+  - `ServerConnectionManager` stores Reverb Connection objects in-memory (`$connectionObjects`) — these are the actual WebSocket connections used to send data to chief servers
+  - `handleHello` returns the response but doesn't call `connection->send()` — that's done by `ChiefServerController`. So `ServerConnectionManager` tests don't trigger `send` on hello.
+  - Command relay uses web routes (not API) because it needs session auth (browser user). Rate limiting via `throttle:browser-commands` middleware.
+  - `ChiefMessageReceived` broadcasts to `private-device.{deviceId}` (not user channel) since browsers subscribe per-device
+  - The `broadcastWith()` method returns both `type` and `message` — `type` is a convenience field for quick filtering in the frontend
+  - Connection cleanup happens in three places: `handleDisconnect` (WebSocket close), `disconnectDevice` (deauthorization), and old connection replacement in `handleHello`
+  - Unique test helper function names per file are required — `generateRelayTestAccessToken` in this file vs `generateTestAccessToken` in ServerConnectionTest
 
 ---

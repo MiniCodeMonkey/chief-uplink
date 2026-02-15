@@ -293,7 +293,8 @@
         "Buffer cleanup runs via scheduled task (no stale data accumulation)"
       ],
       "priority": 15,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-016",
@@ -310,7 +311,8 @@
         "Rate limit: max 60 commands per user per minute from browser"
       ],
       "priority": 16,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-017",

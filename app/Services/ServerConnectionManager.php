@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\DeviceOAuthController;
 use App\Models\DeviceAuthorization;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Laravel\Reverb\Servers\Reverb\Connection;
 
 class ServerConnectionManager
 {
@@ -32,6 +33,14 @@ class ServerConnectionManager
      * @var array<int, string>
      */
     protected array $deviceSessions = [];
+
+    /**
+     * WebSocket Connection objects indexed by connection ID.
+     * Stored to allow sending messages to chief servers from HTTP controllers.
+     *
+     * @var array<int, Connection>
+     */
+    protected array $connectionObjects = [];
 
     /**
      * Process a "hello" message from a chief server connection.
@@ -180,6 +189,7 @@ class ServerConnectionManager
         // Clean up connection tracking
         unset($this->connections[$connectionId]);
         unset($this->deviceToConnection[$deviceId]);
+        unset($this->connectionObjects[$connectionId]);
 
         // Mark device as disconnected in the buffer (starts grace period)
         try {
@@ -312,11 +322,63 @@ class ServerConnectionManager
         if ($connectionId !== null) {
             unset($this->connections[$connectionId]);
             unset($this->deviceToConnection[$deviceId]);
+            unset($this->connectionObjects[$connectionId]);
         }
 
         // Clean up session tracking (don't flush buffer — let grace period handle it)
         unset($this->deviceSessions[$deviceId]);
 
         return $connectionId;
+    }
+
+    /**
+     * Register a WebSocket Connection object for a connection ID.
+     */
+    public function registerConnectionObject(int $connectionId, Connection $connection): void
+    {
+        $this->connectionObjects[$connectionId] = $connection;
+    }
+
+    /**
+     * Send a message to a chief server via its WebSocket connection.
+     *
+     * Returns true if the message was sent, false if the device is offline.
+     */
+    public function sendToDevice(int $deviceId, array $message): bool
+    {
+        $connectionId = $this->deviceToConnection[$deviceId] ?? null;
+        if ($connectionId === null) {
+            return false;
+        }
+
+        $connection = $this->connectionObjects[$connectionId] ?? null;
+        if ($connection === null) {
+            return false;
+        }
+
+        try {
+            $connection->send(json_encode($message));
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('Failed to send message to chief server', [
+                'device_id' => $deviceId,
+                'connection_id' => $connectionId,
+                'type' => $message['type'] ?? 'unknown',
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
+     * Check if a device has an active WebSocket connection.
+     */
+    public function isDeviceOnline(int $deviceId): bool
+    {
+        $connectionId = $this->deviceToConnection[$deviceId] ?? null;
+
+        return $connectionId !== null && isset($this->connectionObjects[$connectionId]);
     }
 }

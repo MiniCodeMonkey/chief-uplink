@@ -2,6 +2,7 @@
 
 namespace App\WebSocket;
 
+use App\Events\ChiefMessageReceived;
 use App\Services\ServerConnectionManager;
 use Illuminate\Support\Facades\Log;
 use Laravel\Reverb\Servers\Reverb\Connection;
@@ -24,6 +25,9 @@ class ChiefServerController
         $connectionId = $connection->id();
 
         $connection->withMaxMessageSize(65536);
+
+        // Register the connection object for sending messages back to chief
+        $this->connectionManager->registerConnectionObject($connectionId, $connection);
 
         $connection->onMessage(function ($message) use ($connection, $connectionId) {
             $this->handleMessage($connection, $connectionId, (string) $message);
@@ -78,13 +82,18 @@ class ChiefServerController
 
         // Connection is authenticated — handle other message types
         $deviceId = $this->connectionManager->getDeviceId($connectionId);
+        $userId = $this->connectionManager->getUserId($connectionId);
         $type = $message['type'] ?? 'unknown';
 
         // Buffer the message for browser replay on reconnect
         $this->connectionManager->bufferMessage($deviceId, $message);
 
-        // Message relay will be implemented in US-016
-        Log::debug('Message from authenticated chief server', [
+        // Broadcast the message to the browser via Reverb
+        if ($deviceId && $userId) {
+            ChiefMessageReceived::dispatch($deviceId, $userId, $message);
+        }
+
+        Log::debug('Message from authenticated chief server relayed to browser', [
             'connection_id' => $connectionId,
             'device_id' => $deviceId,
             'type' => $type,

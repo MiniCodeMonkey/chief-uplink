@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\CommandRelayController;
 use App\Http\Controllers\Api\MessageBufferController;
 use App\Http\Controllers\Auth\DeviceCodeEntryController;
 use App\Http\Controllers\Auth\EmailCaptureController;
@@ -81,6 +82,11 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
 
     // WebSocket message buffer replay (for browser reconnection)
     Route::post('/ws/buffer/replay', [MessageBufferController::class, 'replay'])->name('ws.buffer.replay');
+
+    // WebSocket command relay (browser → chief via WebSocket)
+    Route::post('/ws/command/{deviceId}', [CommandRelayController::class, 'send'])
+        ->middleware('throttle:browser-commands')
+        ->name('ws.command.send');
 });
 
 require __DIR__.'/settings.php';

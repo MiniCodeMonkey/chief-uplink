@@ -50,6 +50,11 @@ return Application::configure(basePath: dirname(__DIR__))
         RateLimiter::for('device-code-entry', function (Request $request) {
             return Limit::perMinutes(15, 10)->by($request->user()?->id ?: $request->ip());
         });
+
+        // Browser WebSocket commands: 60 per user per minute
+        RateLimiter::for('browser-commands', function (Request $request) {
+            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
