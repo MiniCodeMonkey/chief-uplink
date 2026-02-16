@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import {
+    ArrowLeft,
     CheckCircle2,
     ChevronRight,
     Code2,
@@ -11,6 +12,8 @@ import {
     XCircle,
 } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
+import DiffFileTree from '@/components/DiffFileTree.vue';
+import DiffFileViewer from '@/components/DiffFileViewer.vue';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -63,6 +66,9 @@ const storyDiffs = ref<Record<string, StoryDiff>>({});
 const loadingStoryId = ref<string | null>(null);
 const storyDiffErrors = ref<Record<string, string>>({});
 
+// Selected file for viewing diff
+const selectedFile = ref<string | null>(null);
+
 // Completed stories that can have diffs
 const completedStories = computed(() => {
     if (!props.storyDetails) return [];
@@ -78,6 +84,14 @@ const displayStories = computed(() => {
 });
 
 const hasNoStories = computed(() => displayStories.value.length === 0);
+
+// Get the currently selected file's diff data
+const selectedDiffFile = computed<DiffFile | null>(() => {
+    if (!expandedStoryId.value || !selectedFile.value) return null;
+    const diff = storyDiffs.value[expandedStoryId.value];
+    if (!diff) return null;
+    return diff.files.find((f) => f.filename === selectedFile.value) ?? null;
+});
 
 // Listen for diff responses from chief
 onMounted(() => {
@@ -105,6 +119,11 @@ onMounted(() => {
 
         // Clear any previous error
         delete storyDiffErrors.value[storyId];
+
+        // Auto-select first file if none selected
+        if (expandedStoryId.value === storyId && !selectedFile.value && files.length > 0) {
+            selectedFile.value = files[0].filename;
+        }
     });
 
     on('error', (message) => {
@@ -121,15 +140,20 @@ onMounted(() => {
 function toggleStory(storyId: string) {
     if (expandedStoryId.value === storyId) {
         expandedStoryId.value = null;
+        selectedFile.value = null;
         return;
     }
 
     expandedStoryId.value = storyId;
+    selectedFile.value = null;
 
     // Fetch diff if not already loaded and story is completed
     const story = completedStories.value.find((s) => s.id === storyId);
     if (story && !storyDiffs.value[storyId] && !storyDiffErrors.value[storyId]) {
         fetchStoryDiff(storyId);
+    } else if (storyDiffs.value[storyId]?.files.length) {
+        // Auto-select first file
+        selectedFile.value = storyDiffs.value[storyId].files[0].filename;
     }
 }
 
@@ -153,6 +177,14 @@ async function fetchStoryDiff(storyId: string) {
 function retryDiff(storyId: string) {
     delete storyDiffErrors.value[storyId];
     fetchStoryDiff(storyId);
+}
+
+function selectFile(filename: string) {
+    selectedFile.value = filename;
+}
+
+function clearFileSelection() {
+    selectedFile.value = null;
 }
 
 // Re-fetch expanded story diff when device comes back online
@@ -186,7 +218,6 @@ function storyStatusColor(status: string): string {
             return 'text-muted-foreground';
     }
 }
-
 </script>
 
 <template>
@@ -352,7 +383,7 @@ function storyStatusColor(status: string): string {
                                         </button>
                                     </div>
 
-                                    <!-- Diff file list -->
+                                    <!-- Diff content with file tree -->
                                     <div
                                         v-else-if="storyDiffs[story.id]"
                                     >
@@ -366,49 +397,104 @@ function storyStatusColor(status: string): string {
                                             </p>
                                         </div>
 
-                                        <!-- File rows -->
-                                        <div
-                                            v-else
-                                            class="divide-y divide-border"
-                                        >
-                                            <div
-                                                v-for="file in storyDiffs[story.id].files"
-                                                :key="file.filename"
-                                                class="flex items-center gap-3 px-4 py-2.5"
-                                            >
-                                                <!-- File icon -->
-                                                <FileText class="size-4 shrink-0 text-muted-foreground" />
-
-                                                <!-- Filename -->
-                                                <span class="min-w-0 flex-1 truncate font-mono text-sm">
-                                                    {{ file.filename }}
-                                                </span>
-
-                                                <!-- Line changes -->
-                                                <div class="flex shrink-0 items-center gap-2 font-mono text-xs">
-                                                    <span
-                                                        v-if="file.additions > 0"
-                                                        class="flex items-center gap-0.5 text-success"
+                                        <!-- File tree + diff viewer layout -->
+                                        <div v-else>
+                                            <!-- Mobile: file list + selected file diff -->
+                                            <div class="lg:hidden">
+                                                <!-- Back button when viewing a file -->
+                                                <div
+                                                    v-if="selectedFile"
+                                                    class="border-b border-border"
+                                                >
+                                                    <button
+                                                        class="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-primary transition-colors hover:bg-accent/50"
+                                                        @click="clearFileSelection"
                                                     >
-                                                        <Plus class="size-3" />{{ file.additions }}
-                                                    </span>
-                                                    <span
-                                                        v-if="file.deletions > 0"
-                                                        class="flex items-center gap-0.5 text-destructive"
+                                                        <ArrowLeft class="size-4" />
+                                                        Back to file list
+                                                    </button>
+                                                    <div class="flex items-center gap-2 border-t border-border px-4 py-2 text-sm">
+                                                        <FileText class="size-3.5 shrink-0 text-muted-foreground" />
+                                                        <span class="min-w-0 flex-1 truncate font-mono text-xs">
+                                                            {{ selectedFile }}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <!-- File list (mobile) -->
+                                                <div
+                                                    v-if="!selectedFile"
+                                                    class="divide-y divide-border"
+                                                >
+                                                    <button
+                                                        v-for="file in storyDiffs[story.id].files"
+                                                        :key="file.filename"
+                                                        class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent/50"
+                                                        @click="selectFile(file.filename)"
                                                     >
-                                                        <Minus class="size-3" />{{ file.deletions }}
-                                                    </span>
+                                                        <FileText class="size-4 shrink-0 text-muted-foreground" />
+                                                        <span class="min-w-0 flex-1 truncate font-mono text-sm">
+                                                            {{ file.filename }}
+                                                        </span>
+                                                        <div class="flex shrink-0 items-center gap-2 font-mono text-xs">
+                                                            <span
+                                                                v-if="file.additions > 0"
+                                                                class="flex items-center gap-0.5 text-success"
+                                                            >
+                                                                <Plus class="size-3" />{{ file.additions }}
+                                                            </span>
+                                                            <span
+                                                                v-if="file.deletions > 0"
+                                                                class="flex items-center gap-0.5 text-destructive"
+                                                            >
+                                                                <Minus class="size-3" />{{ file.deletions }}
+                                                            </span>
+                                                        </div>
+                                                        <ChevronRight class="size-4 shrink-0 text-muted-foreground" />
+                                                    </button>
+                                                </div>
+
+                                                <!-- Selected file diff (mobile) -->
+                                                <DiffFileViewer
+                                                    v-if="selectedFile && selectedDiffFile"
+                                                    :file="selectedDiffFile"
+                                                />
+                                            </div>
+
+                                            <!-- Desktop: file tree sidebar + diff viewer -->
+                                            <div class="hidden lg:flex">
+                                                <!-- File tree sidebar -->
+                                                <div class="w-64 shrink-0 border-r border-border">
+                                                    <DiffFileTree
+                                                        :files="storyDiffs[story.id].files"
+                                                        :selected-file="selectedFile"
+                                                        @select="selectFile"
+                                                    />
+                                                </div>
+
+                                                <!-- Diff viewer -->
+                                                <div class="min-w-0 flex-1">
+                                                    <DiffFileViewer
+                                                        v-if="selectedDiffFile"
+                                                        :file="selectedDiffFile"
+                                                    />
+                                                    <div
+                                                        v-else
+                                                        class="flex items-center justify-center py-12 text-sm text-muted-foreground"
+                                                    >
+                                                        Select a file to view its diff
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
 
-                                        <!-- Summary footer -->
-                                        <div class="border-t border-border bg-accent/30 px-4 py-2 text-xs text-muted-foreground">
-                                            {{ storyDiffs[story.id].files.length }}
-                                            {{ storyDiffs[story.id].files.length === 1 ? 'file' : 'files' }}
-                                            changed,
-                                            <span class="text-success">{{ storyDiffs[story.id].total_additions }} additions</span>,
-                                            <span class="text-destructive">{{ storyDiffs[story.id].total_deletions }} deletions</span>
+                                            <!-- Summary footer -->
+                                            <div class="border-t border-border bg-accent/30 px-4 py-2 text-xs text-muted-foreground">
+                                                {{ storyDiffs[story.id].files.length }}
+                                                {{ storyDiffs[story.id].files.length === 1 ? 'file' : 'files' }}
+                                                changed,
+                                                <span class="text-success">{{ storyDiffs[story.id].total_additions }} additions</span>,
+                                                <span class="text-destructive">{{ storyDiffs[story.id].total_deletions }} deletions</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

@@ -657,7 +657,8 @@
         "Diff color scheme matches the app's dark/light mode"
       ],
       "priority": 34,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-035",
