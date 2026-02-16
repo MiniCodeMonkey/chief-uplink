@@ -1967,3 +1967,28 @@
   - Token refresh rate limit tests need careful assertion design — track `$rateLimited` boolean to avoid "risky test" warnings
   - Helper functions generating access tokens must have unique names per test file to avoid Pest conflicts
 ---
+
+## US-055: Browser E2E Tests — Completed
+- **What was done:** Configured Laravel Dusk with Chromium headless, created 35 browser E2E tests across 7 test files
+- **Setup:**
+  - Installed Chromium, php8.4-zip, ChromeDriver (matching versions)
+  - Created `.env.dusk.local` with file-based session/cache and dusk.sqlite DB
+  - Customized `DuskTestCase.php` with `--no-sandbox`, Chromium binary path
+  - Used `DatabaseTruncation` trait for test isolation (not `DatabaseMigrations` — SQLite rollback fails)
+- **Test files created:**
+  - tests/Browser/AuthOnboardingTest.php — Login page, onboarding, email capture redirect (6 tests)
+  - tests/Browser/ProjectNavigationTest.php — Dashboard→project, tab switching, run history (5 tests)
+  - tests/Browser/CommandPaletteSettingsTest.php — Cmd+K, search, navigate, device deauth, dark/light mode toggle (5 tests)
+  - tests/Browser/ResponsiveViewportTest.php — Mobile 375x812 (bottom tabs, no overflow, touch targets 44px), tablet 768x1024 (6 tests)
+  - tests/Browser/UIStatesTest.php — Skeleton loading, empty states (onboarding, no PRD, no devices), offline banner, email capture form (8 tests)
+  - tests/Browser/KeyboardNavigationTest.php — Tab navigation, Enter selection, Escape close, Cmd+K keyboard flow (4 tests)
+  - tests/Browser/ExampleTest.php — Basic smoke test (1 test)
+- **Test results:** 35 E2E tests, 67 assertions, all passing in ~53s; full Pest suite 730 tests still passing
+- **Learnings for future iterations:**
+  - `DatabaseMigrations` fails on SQLite rollback for `dropColumn` with unique indexes — use `DatabaseTruncation` instead
+  - Dusk's `->script()` returns array, breaking fluent chains — call separately then continue chain
+  - CSS `:contains()` pseudo-selector is jQuery-only — use `clickAtXPath()` for text-based button matching
+  - Dusk's `type()` doesn't trigger Vue `v-model` updates on Inertia forms — use `keys()` or `script()` with native value setter
+  - Use `waitForText`/`waitFor` before assertions to avoid flaky tests from page transition timing
+  - `assertMissing` checks presence instantly — prefer `waitUntilMissing` for elements with exit animations
+---

@@ -1099,7 +1099,8 @@
         "E2E tests run in CI with headless browser"
       ],
       "priority": 55,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-056",
