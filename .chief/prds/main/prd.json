@@ -967,7 +967,8 @@
         "Instant perceived performance: Optimistic navigation — Inertia prefetches on hover (desktop) so page transitions feel instant"
       ],
       "priority": 49,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-050",

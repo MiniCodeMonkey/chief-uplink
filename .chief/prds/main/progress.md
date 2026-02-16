@@ -146,6 +146,10 @@
 - `useNetworkStatus` composable monitors `navigator.onLine` and browser online/offline events — shows toast notifications
 - ToastContainer must be mounted in each layout (AppLayout, ProjectLayout) and standalone pages (PrdChat) that use toasts
 - Input component has built-in `aria-invalid` styling — bind `:aria-invalid="!!form.errors.fieldName"` to show destructive border
+- Inertia Link `prefetch` prop triggers hover-based prefetch for instant navigation — add to key navigation Links (tabs, sidebar nav, breadcrumbs)
+- For non-Link elements, use `router.prefetch(url)` on `@mouseenter` for the same effect
+- Inertia progress bar styled via `#nprogress .bar` / `#nprogress .peg` CSS selectors in `app.css`
+- `content-reveal` CSS class provides fade+slide-up animation for content replacing skeletons
 
 ---
 
@@ -1781,4 +1785,32 @@
   - Error pages should use minimal layouts (no AppLayout/ProjectLayout) since the user may not be authenticated
   - Pre-existing TS errors exist in Echo, PushNotifications, TwoFactorAuth, and several auth pages — these are unrelated to changes
   - `useFlashToasts` should only be called once per layout to avoid duplicate toast notifications
+---
+
+## 2026-02-16 - US-049
+- What was implemented:
+  - Enhanced Inertia progress bar with thin accent-colored line at top of page (2px height, amber glow peg effect)
+  - Added Inertia `prefetch` prop to key navigation links for instant perceived performance: ProjectTabBar tabs (desktop + mobile), settings layout sidebar nav, BreadcrumbPicker home link, docs sidebar navigation and prev/next links
+  - Added programmatic `router.prefetch()` on mouseenter for Dashboard project cards
+  - Added `content-reveal` CSS animation for smooth skeleton-to-content transitions (fade+slide-up) on PRDs list and Settings form
+  - Added progress bar delay of 100ms to avoid flashing for fast navigations
+  - Verified all existing skeleton states (Dashboard, PRDs, Settings, Diffs) are correctly placed
+  - Verified all existing empty states (Dashboard multiple states, PRDs, Diffs, Run, Overview, Devices, CloudServers) have proper text and action buttons
+- Files changed:
+  - `resources/css/app.css` — added `#nprogress` bar/peg styling, `content-reveal` animation keyframes
+  - `resources/js/app.ts` — enhanced Inertia progress config (showSpinner: false, delay: 100)
+  - `resources/js/components/ProjectTabBar.vue` — added `prefetch` to desktop and mobile tab Links
+  - `resources/js/components/BreadcrumbPicker.vue` — added `prefetch` to home Link
+  - `resources/js/layouts/settings/Layout.vue` — added `prefetch` to settings nav Links
+  - `resources/js/pages/Dashboard.vue` — added `prefetchProject()` function and `@mouseenter` handler on project cards
+  - `resources/js/pages/docs/Show.vue` — added `prefetch` to sidebar nav, prev, and next Links
+  - `resources/js/pages/projects/Prds.vue` — added `content-reveal` class to PRD cards grid
+  - `resources/js/pages/projects/Settings.vue` — added `content-reveal` class to settings form
+- **Learnings for future iterations:**
+  - Inertia v2 supports `prefetch` prop on Link components — prefetches page data on hover for instant navigation
+  - For non-Link elements (like divs with click handlers), use `router.prefetch(url)` programmatically on mouseenter
+  - Pages with server-rendered Inertia props (Devices, CloudServers, Overview) always have data on mount — skeleton states only matter for async-loaded views (WebSocket responses, lazy props)
+  - Pre-existing TS errors exist across many files — not blocking for builds/tests
+  - Inertia progress bar uses NProgress under the hood — can be styled via `#nprogress .bar` and `#nprogress .peg` CSS
+  - `content-reveal` animation works with prefers-reduced-motion since the global reduced motion rule sets all animation-durations to near-zero
 ---
