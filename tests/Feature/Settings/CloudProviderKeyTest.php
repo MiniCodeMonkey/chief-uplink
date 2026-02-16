@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\CloudDeployment;
 use App\Models\ProviderApiKey;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -16,6 +17,7 @@ test('cloud servers page is displayed', function () {
         ->component('settings/CloudServers')
         ->has('providerKeys')
         ->has('supportedProviders')
+        ->has('deployments')
     );
 });
 
@@ -386,6 +388,63 @@ test('destroy action requires authentication', function () {
     $response = $this->delete(route('cloud-servers.destroy', $key->id));
 
     $response->assertRedirect(route('login'));
+});
+
+test('cloud servers page lists deployments', function () {
+    $user = User::factory()->create();
+    $deployment = CloudDeployment::factory()->hetzner()->create([
+        'user_id' => $user->id,
+        'status' => 'active',
+        'ip_address' => '1.2.3.4',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->get(route('cloud-servers.index'));
+
+    $response->assertInertia(fn ($page) => $page
+        ->has('deployments', 1)
+        ->where('deployments.0.id', $deployment->id)
+        ->where('deployments.0.provider', 'hetzner')
+        ->where('deployments.0.status', 'active')
+        ->where('deployments.0.ip_address', '1.2.3.4')
+    );
+});
+
+test('cloud servers page only shows current users deployments', function () {
+    $user = User::factory()->create();
+    $otherUser = User::factory()->create();
+
+    CloudDeployment::factory()->hetzner()->create(['user_id' => $user->id]);
+    CloudDeployment::factory()->digitalocean()->create(['user_id' => $otherUser->id]);
+
+    $response = $this
+        ->actingAs($user)
+        ->get(route('cloud-servers.index'));
+
+    $response->assertInertia(fn ($page) => $page
+        ->has('deployments', 1)
+        ->where('deployments.0.provider', 'hetzner')
+    );
+});
+
+test('cloud servers page shows destroyed servers in history', function () {
+    $user = User::factory()->create();
+    CloudDeployment::factory()->hetzner()->create([
+        'user_id' => $user->id,
+        'status' => 'active',
+    ]);
+    CloudDeployment::factory()->destroyed()->create([
+        'user_id' => $user->id,
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->get(route('cloud-servers.index'));
+
+    $response->assertInertia(fn ($page) => $page
+        ->has('deployments', 2)
+    );
 });
 
 test('digitalocean validation uses account email as fallback name', function () {

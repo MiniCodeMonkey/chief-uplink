@@ -182,6 +182,58 @@ class CloudDeployController extends Controller
         ]);
     }
 
+    public function restartChief(Request $request, int $id): JsonResponse
+    {
+        $deployment = $request->user()
+            ->cloudDeployments()
+            ->where('status', 'active')
+            ->findOrFail($id);
+
+        if (! $deployment->ip_address || ! $deployment->provider_api_key) {
+            return response()->json(['error' => 'Server is not ready for restart.'], 422);
+        }
+
+        try {
+            $result = match ($deployment->provider) {
+                'hetzner' => $this->restartHetznerChief($deployment),
+                'digitalocean' => $this->restartDigitalOceanChief($deployment),
+                default => throw new \RuntimeException('Unsupported provider'),
+            };
+
+            return response()->json(['success' => true, 'message' => 'Chief restart initiated.']);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage() ?: 'Failed to restart Chief. Please try again.',
+            ], 500);
+        }
+    }
+
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $deployment = $request->user()
+            ->cloudDeployments()
+            ->whereIn('status', ['active', 'provisioning', 'suspended'])
+            ->findOrFail($id);
+
+        try {
+            if ($deployment->provider_server_id && $deployment->provider_api_key) {
+                match ($deployment->provider) {
+                    'hetzner' => $this->destroyHetznerServer($deployment),
+                    'digitalocean' => $this->destroyDigitalOceanServer($deployment),
+                    default => null,
+                };
+            }
+
+            $deployment->update(['status' => 'destroyed']);
+
+            return response()->json(['success' => true, 'message' => 'Server destroyed.']);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage() ?: 'Failed to destroy server. Please try again.',
+            ], 500);
+        }
+    }
+
     private function getApiKey(Request $request, string $provider): ?string
     {
         $key = $request->user()
@@ -500,5 +552,57 @@ CLOUD_INIT;
             'status' => $status,
             'ip_address' => $ip,
         ];
+    }
+
+    // --- Restart Chief Methods ---
+
+    private function restartHetznerChief(CloudDeployment $deployment): void
+    {
+        // Hetzner soft reboot triggers systemd restart of chief service
+        $response = Http::withToken($deployment->provider_api_key)
+            ->timeout(15)
+            ->post("https://api.hetzner.cloud/v1/servers/{$deployment->provider_server_id}/actions/reboot");
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('Failed to restart server via Hetzner API.');
+        }
+    }
+
+    private function restartDigitalOceanChief(CloudDeployment $deployment): void
+    {
+        // DigitalOcean reboot via power cycle
+        $response = Http::withToken($deployment->provider_api_key)
+            ->timeout(15)
+            ->post("https://api.digitalocean.com/v2/droplets/{$deployment->provider_server_id}/actions", [
+                'type' => 'reboot',
+            ]);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('Failed to restart server via DigitalOcean API.');
+        }
+    }
+
+    // --- Destroy Server Methods ---
+
+    private function destroyHetznerServer(CloudDeployment $deployment): void
+    {
+        $response = Http::withToken($deployment->provider_api_key)
+            ->timeout(15)
+            ->delete("https://api.hetzner.cloud/v1/servers/{$deployment->provider_server_id}");
+
+        if (! $response->successful() && $response->status() !== 404) {
+            throw new \RuntimeException('Failed to destroy server via Hetzner API.');
+        }
+    }
+
+    private function destroyDigitalOceanServer(CloudDeployment $deployment): void
+    {
+        $response = Http::withToken($deployment->provider_api_key)
+            ->timeout(15)
+            ->delete("https://api.digitalocean.com/v2/droplets/{$deployment->provider_server_id}");
+
+        if (! $response->successful() && $response->status() !== 404) {
+            throw new \RuntimeException('Failed to destroy server via DigitalOcean API.');
+        }
     }
 }

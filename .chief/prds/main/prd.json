@@ -762,7 +762,8 @@
         "Empty state: \"No cloud servers. Deploy one to run chief without managing your own VPS.\""
       ],
       "priority": 39,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-040",

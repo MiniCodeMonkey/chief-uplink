@@ -34,6 +34,8 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
         ->middleware('throttle:cloud-deploy')
         ->name('cloud-deploy.deploy');
     Route::get('settings/cloud-deploy/{id}/status', [CloudDeployController::class, 'status'])->name('cloud-deploy.status');
+    Route::post('settings/cloud-deploy/{id}/restart', [CloudDeployController::class, 'restartChief'])->name('cloud-deploy.restart');
+    Route::delete('settings/cloud-deploy/{id}', [CloudDeployController::class, 'destroy'])->name('cloud-deploy.destroy');
 
     Route::get('settings/appearance', function () {
         return Inertia::render('settings/Appearance');

@@ -519,3 +519,199 @@ test('deploy requires authentication', function () {
 
     $response->assertUnauthorized();
 });
+
+// --- Restart Chief endpoint ---
+
+test('can restart chief on active hetzner server', function () {
+    Http::fake([
+        'api.hetzner.cloud/v1/servers/*/actions/reboot' => Http::response([
+            'action' => ['id' => 1, 'status' => 'running'],
+        ], 201),
+    ]);
+
+    $user = User::factory()->create();
+    $deployment = CloudDeployment::factory()->hetzner()->create([
+        'user_id' => $user->id,
+        'status' => 'active',
+        'ip_address' => '1.2.3.4',
+        'provider_server_id' => '12345',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->postJson(route('cloud-deploy.restart', $deployment->id));
+
+    $response->assertOk();
+    $response->assertJson(['success' => true]);
+});
+
+test('can restart chief on active digitalocean server', function () {
+    Http::fake([
+        'api.digitalocean.com/v2/droplets/*/actions' => Http::response([
+            'action' => ['id' => 1, 'status' => 'in-progress'],
+        ], 201),
+    ]);
+
+    $user = User::factory()->create();
+    $deployment = CloudDeployment::factory()->digitalocean()->create([
+        'user_id' => $user->id,
+        'status' => 'active',
+        'ip_address' => '5.6.7.8',
+        'provider_server_id' => '87654',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->postJson(route('cloud-deploy.restart', $deployment->id));
+
+    $response->assertOk();
+    $response->assertJson(['success' => true]);
+});
+
+test('cannot restart chief on non-active server', function () {
+    $user = User::factory()->create();
+    $deployment = CloudDeployment::factory()->hetzner()->create([
+        'user_id' => $user->id,
+        'status' => 'provisioning',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->postJson(route('cloud-deploy.restart', $deployment->id));
+
+    $response->assertNotFound();
+});
+
+test('cannot restart chief on another users server', function () {
+    $user = User::factory()->create();
+    $otherUser = User::factory()->create();
+    $deployment = CloudDeployment::factory()->create([
+        'user_id' => $otherUser->id,
+        'status' => 'active',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->postJson(route('cloud-deploy.restart', $deployment->id));
+
+    $response->assertNotFound();
+});
+
+// --- Destroy server endpoint ---
+
+test('can destroy a hetzner server', function () {
+    Http::fake([
+        'api.hetzner.cloud/v1/servers/*' => Http::response(null, 200),
+    ]);
+
+    $user = User::factory()->create();
+    $deployment = CloudDeployment::factory()->hetzner()->create([
+        'user_id' => $user->id,
+        'status' => 'active',
+        'provider_server_id' => '12345',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->deleteJson(route('cloud-deploy.destroy', $deployment->id));
+
+    $response->assertOk();
+    $response->assertJson(['success' => true]);
+
+    $deployment->refresh();
+    expect($deployment->status)->toBe('destroyed');
+});
+
+test('can destroy a digitalocean server', function () {
+    Http::fake([
+        'api.digitalocean.com/v2/droplets/*' => Http::response(null, 204),
+    ]);
+
+    $user = User::factory()->create();
+    $deployment = CloudDeployment::factory()->digitalocean()->create([
+        'user_id' => $user->id,
+        'status' => 'active',
+        'provider_server_id' => '87654',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->deleteJson(route('cloud-deploy.destroy', $deployment->id));
+
+    $response->assertOk();
+    $response->assertJson(['success' => true]);
+
+    $deployment->refresh();
+    expect($deployment->status)->toBe('destroyed');
+});
+
+test('can destroy a provisioning server', function () {
+    Http::fake([
+        'api.hetzner.cloud/v1/servers/*' => Http::response(null, 200),
+    ]);
+
+    $user = User::factory()->create();
+    $deployment = CloudDeployment::factory()->hetzner()->create([
+        'user_id' => $user->id,
+        'status' => 'provisioning',
+        'provider_server_id' => '12345',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->deleteJson(route('cloud-deploy.destroy', $deployment->id));
+
+    $response->assertOk();
+    $deployment->refresh();
+    expect($deployment->status)->toBe('destroyed');
+});
+
+test('cannot destroy already destroyed server', function () {
+    $user = User::factory()->create();
+    $deployment = CloudDeployment::factory()->destroyed()->create([
+        'user_id' => $user->id,
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->deleteJson(route('cloud-deploy.destroy', $deployment->id));
+
+    $response->assertNotFound();
+});
+
+test('cannot destroy another users server', function () {
+    $user = User::factory()->create();
+    $otherUser = User::factory()->create();
+    $deployment = CloudDeployment::factory()->create([
+        'user_id' => $otherUser->id,
+        'status' => 'active',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->deleteJson(route('cloud-deploy.destroy', $deployment->id));
+
+    $response->assertNotFound();
+});
+
+test('destroy handles provider api 404 gracefully', function () {
+    Http::fake([
+        'api.hetzner.cloud/v1/servers/*' => Http::response(null, 404),
+    ]);
+
+    $user = User::factory()->create();
+    $deployment = CloudDeployment::factory()->hetzner()->create([
+        'user_id' => $user->id,
+        'status' => 'active',
+        'provider_server_id' => '12345',
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->deleteJson(route('cloud-deploy.destroy', $deployment->id));
+
+    // 404 from provider is OK — server already gone
+    $response->assertOk();
+    $deployment->refresh();
+    expect($deployment->status)->toBe('destroyed');
+});

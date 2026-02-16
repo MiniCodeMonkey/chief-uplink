@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Models\CloudDeployment;
 use App\Models\ProviderApiKey;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,9 +30,30 @@ class CloudProviderKeyController extends Controller
                 'created_at' => $key->created_at?->toISOString(),
             ]);
 
+        $deployments = $request->user()
+            ->cloudDeployments()
+            ->with('deviceAuthorization')
+            ->orderByRaw("CASE WHEN status = 'destroyed' THEN 1 ELSE 0 END")
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(fn (CloudDeployment $deployment) => [
+                'id' => $deployment->id,
+                'provider' => $deployment->provider,
+                'region' => $deployment->region,
+                'tier' => $deployment->tier,
+                'ip_address' => $deployment->ip_address,
+                'status' => $deployment->status,
+                'monthly_cost' => $deployment->monthly_cost,
+                'provider_server_id' => $deployment->provider_server_id,
+                'device_name' => $deployment->deviceAuthorization?->device_name,
+                'device_is_online' => $deployment->deviceAuthorization?->is_online ?? false,
+                'created_at' => $deployment->created_at?->toISOString(),
+            ]);
+
         return Inertia::render('settings/CloudServers', [
             'providerKeys' => $keys,
             'supportedProviders' => self::SUPPORTED_PROVIDERS,
+            'deployments' => $deployments,
         ]);
     }
 
