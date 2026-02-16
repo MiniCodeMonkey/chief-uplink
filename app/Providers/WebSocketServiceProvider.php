@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\PrdSessionManager;
 use App\Services\ServerConnectionManager;
 use Illuminate\Support\ServiceProvider;
 
@@ -13,6 +14,7 @@ class WebSocketServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(ServerConnectionManager::class);
+        $this->app->singleton(PrdSessionManager::class);
     }
 
     /**

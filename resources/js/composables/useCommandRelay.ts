@@ -19,10 +19,11 @@ export type CommandType =
     | 'get_prds'
     | 'refine_prd';
 
-interface CommandResponse {
+export interface CommandResponse {
     status: string;
     type: string;
     device_id: number;
+    session_timeout_remaining?: number;
 }
 
 interface CommandErrorResponse {

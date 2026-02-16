@@ -582,7 +582,8 @@
         "If the PRD is currently being used in a run, show a warning: \"This PRD is currently in use by an active run. Changes will apply to future runs.\""
       ],
       "priority": 30,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-031",
@@ -601,7 +602,8 @@
         "Typing any message resets the inactivity timer"
       ],
       "priority": 31,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-032",

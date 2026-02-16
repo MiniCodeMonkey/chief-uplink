@@ -27,4 +27,16 @@ return [
 
     'buffer_grace_period' => (int) env('WS_BUFFER_GRACE_PERIOD', 300),
 
+    /*
+    |--------------------------------------------------------------------------
+    | PRD Session Timeout
+    |--------------------------------------------------------------------------
+    |
+    | Number of seconds of inactivity before a PRD chat session expires.
+    | Default: 1800 seconds (30 minutes).
+    |
+    */
+
+    'prd_session_timeout' => (int) env('PRD_SESSION_TIMEOUT', 1800),
+
 ];

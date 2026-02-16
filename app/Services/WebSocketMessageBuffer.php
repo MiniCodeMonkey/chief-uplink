@@ -17,8 +17,11 @@ class WebSocketMessageBuffer
         'run_paused',
         'clone_progress',
         'session_timeout_warning',
+        'session_expired',
         'error',
         'quota_exhausted',
+        'prd_output',
+        'prd_response_complete',
     ];
 
     /**

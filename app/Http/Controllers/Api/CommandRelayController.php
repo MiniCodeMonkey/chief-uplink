@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\PrdSessionManager;
 use App\Services\ServerConnectionManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,6 +34,7 @@ class CommandRelayController extends Controller
 
     public function __construct(
         protected ServerConnectionManager $connectionManager,
+        protected PrdSessionManager $sessionManager,
     ) {}
 
     /**
@@ -94,16 +96,50 @@ class CommandRelayController extends Controller
             ], 502);
         }
 
+        // Track PRD session activity
+        $this->trackPrdSession($type, $payload, $deviceId, $request->user()->id);
+
         Log::debug('Command relayed from browser to chief', [
             'user_id' => $request->user()->id,
             'device_id' => $deviceId,
             'type' => $type,
         ]);
 
-        return response()->json([
+        $response = [
             'status' => 'sent',
             'type' => $type,
             'device_id' => $deviceId,
-        ]);
+        ];
+
+        // Include time remaining for PRD session commands
+        $sessionId = $payload['session_id'] ?? null;
+        if ($sessionId && in_array($type, ['new_prd', 'refine_prd', 'prd_message'], true)) {
+            $response['session_timeout_remaining'] = $this->sessionManager->getTimeRemaining($sessionId);
+        }
+
+        return response()->json($response);
+    }
+
+    /**
+     * Track PRD session lifecycle events.
+     */
+    protected function trackPrdSession(string $type, array $payload, int $deviceId, int $userId): void
+    {
+        $sessionId = $payload['session_id'] ?? null;
+        if (! $sessionId) {
+            return;
+        }
+
+        match ($type) {
+            'new_prd' => $this->sessionManager->registerSession(
+                $sessionId, $deviceId, $userId
+            ),
+            'refine_prd' => $this->sessionManager->registerSession(
+                $sessionId, $deviceId, $userId, $payload['prd_id'] ?? null
+            ),
+            'prd_message' => $this->sessionManager->touchSession($sessionId),
+            'close_prd_session' => $this->sessionManager->closeSession($sessionId),
+            default => null,
+        };
     }
 }

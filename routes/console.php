@@ -16,3 +16,4 @@ Artisan::command('ws:buffer:cleanup', function () {
 })->purpose('Clean up stale WebSocket message buffers that have exceeded the grace period');
 
 Schedule::command('ws:buffer:cleanup')->everyMinute();
+Schedule::command('prd:check-timeouts')->everyMinute();

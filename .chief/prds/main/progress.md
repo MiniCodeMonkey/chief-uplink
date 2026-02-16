@@ -88,6 +88,14 @@
 - PRD chat session flow: first message sends `new_prd` to create session, subsequent messages use `prd_message` with session_id
 - PRD preview panel: `PrdPreviewPanel.vue` renders markdown-it output, shows "Live" indicator during streaming, auto-scrolls to follow content
 - PrdChat has side-by-side layout (desktop) with resizable divider and mobile toggle ("Chat"/"Preview") — `prdContent` ref tracks latest Claude response
+- PRD refinement route: `/projects/{slug}/prd/{prdId}/refine` → `ProjectController@prdRefine` — reuses PrdChat.vue with `mode: 'refine'`
+- Refine mode uses `refine_prd` command (not `new_prd`) for first message — includes `prd_id` in payload
+- `close_prd_session` includes `prd_id` in refine mode so chief updates the existing PRD instead of creating new
+- `refine_prd` command must be in both `CommandRelayController::VALID_COMMANDS` and `useCommandRelay` `CommandType` union
+- `PrdSessionManager` service tracks active PRD sessions in Redis — registered/touched on command relay, cleaned up via `prd:check-timeouts` scheduler
+- PRD session Redis keys: `prd:session:{session_id}` (hash), `prd:device:{device_id}:sessions` (set), `prd:sessions:expiring` (sorted set)
+- `CommandResponse` type in `useCommandRelay.ts` includes `session_timeout_remaining?` — returned by server for PRD session commands
+- `WebSocketMessageBuffer::BUFFERABLE_TYPES` includes `prd_output`, `prd_response_complete`, `session_expired` for browser reconnection replay
 
 ---
 
@@ -1117,4 +1125,64 @@
   - The preview panel border-left on desktop provides visual separation alongside the divider
   - `h-screen` instead of `min-h-screen` is needed for the side-by-side flex layout to work correctly with overflow
 
+---
+
+## 2026-02-16 - US-030
+- What was implemented:
+  - PRD refinement route at `/projects/{slug}/prd/{prdId}/refine` with `ProjectController@prdRefine`
+  - `prdRefine` controller method loads project, checks for active run, passes `mode: 'refine'`, `prdId`, and `hasActiveRun` props to PrdChat.vue
+  - PrdChat.vue now supports refine mode: different title ("Refine PRD"), different empty state text, different placeholder text
+  - First message in refine mode sends `refine_prd` command (with `prd_id`) instead of `new_prd`
+  - Save/close operations include `prd_id` in refine mode so chief updates existing PRD
+  - Active run warning banner displayed when PRD is currently in use by a running/paused run
+  - Added `refine_prd` to both `CommandRelayController::VALID_COMMANDS` (PHP) and `useCommandRelay` `CommandType` (TS)
+  - Prds.vue already had the `handleRefine` function navigating to the refine route — now it works
+- Files changed:
+  - app/Http/Controllers/ProjectController.php (added `prdRefine` method)
+  - app/Http/Controllers/Api/CommandRelayController.php (added `refine_prd` to VALID_COMMANDS)
+  - resources/js/composables/useCommandRelay.ts (added `refine_prd` to CommandType)
+  - resources/js/pages/projects/PrdChat.vue (refine mode support: title, empty state, commands, active run warning)
+  - routes/web.php (added refine route)
+- **Learnings for future iterations:**
+  - PrdChat.vue was already designed to accept `mode: 'create' | 'refine'` and `prdId` props — implementation was straightforward
+  - The refine mode reuses the same WebSocket events (`prd_output`, `prd_response_complete`) as creation — no new event types needed
+  - `close_prd_session` command with `prd_id` tells chief to update existing vs create new — the same command handles both cases
+  - Active run detection uses `CachedProjectState.status` field — values `running` and `paused` indicate an active run
+  - The `AlertTriangle` icon from lucide-vue-next is used for warning banners
+
+---
+
+## 2026-02-16 - US-031
+- What was implemented:
+  - PrdSessionManager service (`app/Services/PrdSessionManager.php`) for tracking PRD sessions in Redis with timeout management
+  - CheckPrdSessionTimeouts command (`app/Console/Commands/CheckPrdSessionTimeouts.php`) scheduled every minute to send timeout warnings and expire stale sessions
+  - PRD session timeout config in `config/websocket.php` (`PRD_SESSION_TIMEOUT` env var, default 30 minutes)
+  - CommandRelayController updated to register sessions on `new_prd`/`refine_prd`, touch on `prd_message`, and close on `close_prd_session`
+  - Server returns `session_timeout_remaining` in responses for PRD session commands
+  - PrdChat.vue enhanced with: countdown timer in header (subtle >5min, prominent <1min), session expired banner with Resume button, browser reconnection replay of buffered messages
+  - Resume functionality: creates a new session with context from saved PRD, sends continuation message to chief
+  - WebSocket reconnection detection: watches Echo connection state, replays buffered `prd_output`/`prd_response_complete`/`session_expired` messages
+  - Added `prd_output`, `prd_response_complete`, and `session_expired` to `WebSocketMessageBuffer::BUFFERABLE_TYPES`
+  - Multiple PRD sessions can be active simultaneously (tracked per-device in Redis sets)
+  - Typing any message resets the inactivity timer (via `touchSession` on `prd_message` command)
+  - Warning deduplication: each warning level (10min, 5min, 1min) sent only once per session
+  - CommandResponse type exported with optional `session_timeout_remaining` field
+- Files changed:
+  - app/Services/PrdSessionManager.php (new)
+  - app/Console/Commands/CheckPrdSessionTimeouts.php (new)
+  - app/Http/Controllers/Api/CommandRelayController.php (updated: session tracking)
+  - app/Services/WebSocketMessageBuffer.php (updated: added bufferable types)
+  - app/Providers/WebSocketServiceProvider.php (updated: registered PrdSessionManager singleton)
+  - config/websocket.php (updated: prd_session_timeout config)
+  - .env.example (updated: PRD_SESSION_TIMEOUT)
+  - resources/js/pages/projects/PrdChat.vue (updated: countdown timer, resume, reconnection)
+  - resources/js/composables/useCommandRelay.ts (updated: exported CommandResponse with session_timeout_remaining)
+  - routes/console.php (updated: scheduled prd:check-timeouts command)
+- **Learnings for future iterations:**
+  - Redis sorted sets (`zadd`/`zrangebyscore`) are efficient for scanning sessions by expiry time — avoid iterating all keys
+  - Warning deduplication uses Redis flags with TTL (`prd:warning:{session_id}:{minutes}`) so each warning level is sent only once
+  - Browser reconnection detection works by watching the `echoConnected` computed from `useEchoConnectionStatus()` — tracks `wasDisconnected` flag
+  - The `CommandResponse` interface must be exported when other components need to access its properties (TS2352 error otherwise)
+  - `ChiefMessageReceived::dispatch()` can be used from backend services to send events to browser without going through the chief server WebSocket
+  - PRD session cleanup happens in three ways: explicit close_prd_session, timeout expiry via scheduler, and device disconnect cleanup
 ---

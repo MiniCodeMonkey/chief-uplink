@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
+import axios from 'axios';
 import {
     AlertTriangle,
     ArrowDown,
     ArrowLeft,
     ChevronDown,
+    Clock,
     Eye,
     Loader2,
     MessageSquare,
+    RefreshCw,
     Save,
     Send,
 } from 'lucide-vue-next';
@@ -24,6 +27,7 @@ import { useChiefMessages } from '@/composables/useChiefMessages';
 import { useCommandRelay } from '@/composables/useCommandRelay';
 import { useConnectionStatus } from '@/composables/useConnectionStatus';
 import { useDeviceStatus } from '@/composables/useDeviceStatus';
+import { useEchoConnectionStatus } from '@/composables/useEcho';
 import { useToast } from '@/composables/useToast';
 
 interface ChatMessage {
@@ -49,6 +53,7 @@ const { isOnline } = useConnectionStatus();
 const { sendCommand } = useCommandRelay();
 const { subscribe, on } = useChiefMessages(props.deviceId);
 const { success, error: errorToast } = useToast();
+const { isConnected: echoConnected } = useEchoConnectionStatus();
 
 // Chat state
 const messages = ref<ChatMessage[]>([]);
@@ -58,6 +63,12 @@ const sessionId = ref<string | null>(null);
 const hasActiveSession = ref(false);
 const isSaving = ref(false);
 const saveAction = ref<'close' | 'run' | null>(null);
+const sessionExpired = ref(false);
+const isResuming = ref(false);
+
+// Session timeout tracking
+const sessionTimeoutRemaining = ref<number | null>(null);
+let timeoutTickInterval: ReturnType<typeof setInterval> | null = null;
 
 // Preview state — accumulated PRD content from Claude messages
 const prdContent = ref('');
@@ -75,6 +86,10 @@ const messagesContainer = ref<HTMLElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const isAutoScrollPaused = ref(false);
 
+// Reconnection tracking
+const wasDisconnected = ref(false);
+const isReplayingMessages = ref(false);
+
 // Message ID counter
 let messageIdCounter = 0;
 function generateMessageId(): string {
@@ -90,6 +105,26 @@ const serverNotLive = computed(() => !isOnline.value);
 
 // Computed: has any preview content to show
 const hasPreviewContent = computed(() => prdContent.value.length > 0);
+
+// Computed: formatted countdown timer text
+const countdownText = computed(() => {
+    if (sessionTimeoutRemaining.value === null) return null;
+    const total = sessionTimeoutRemaining.value;
+    if (total <= 0) return '0:00';
+    const mins = Math.floor(total / 60);
+    const secs = total % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+});
+
+// Computed: should show timer prominently (< 1 minute)
+const isTimerUrgent = computed(() => {
+    return sessionTimeoutRemaining.value !== null && sessionTimeoutRemaining.value < 60;
+});
+
+// Computed: should show timer at all (< 10 minutes or always when session is active)
+const showTimer = computed(() => {
+    return hasActiveSession.value && sessionTimeoutRemaining.value !== null && sessionTimeoutRemaining.value <= 600;
+});
 
 // Text area auto-resize
 function adjustTextareaHeight() {
@@ -163,10 +198,38 @@ function stopDrag() {
     document.removeEventListener('mouseup', stopDrag);
 }
 
+// Start the countdown timer tick
+function startTimeoutTick(initialRemaining: number) {
+    sessionTimeoutRemaining.value = initialRemaining;
+
+    // Clear any existing ticker
+    if (timeoutTickInterval) {
+        clearInterval(timeoutTickInterval);
+    }
+
+    timeoutTickInterval = setInterval(() => {
+        if (sessionTimeoutRemaining.value !== null && sessionTimeoutRemaining.value > 0) {
+            sessionTimeoutRemaining.value--;
+        } else if (sessionTimeoutRemaining.value !== null && sessionTimeoutRemaining.value <= 0) {
+            // Timer reached zero — the backend will send session_expired
+            if (timeoutTickInterval) {
+                clearInterval(timeoutTickInterval);
+                timeoutTickInterval = null;
+            }
+        }
+    }, 1000);
+}
+
+// Reset the timeout timer (called when sending a message)
+function resetTimeoutTimer() {
+    const timeout = 1800; // 30 minutes default
+    startTimeoutTick(timeout);
+}
+
 // Send a user message
 async function handleSend() {
     const text = userInput.value.trim();
-    if (!text || isClaudeResponding.value || serverNotLive.value) return;
+    if (!text || isClaudeResponding.value || serverNotLive.value || sessionExpired.value) return;
 
     // Add user message
     const userMsg: ChatMessage = {
@@ -200,9 +263,10 @@ async function handleSend() {
         sessionId.value = generateSessionId();
         hasActiveSession.value = true;
 
+        let result;
         if (isRefineMode.value && props.prdId) {
             // Refine existing PRD
-            await sendCommand(props.deviceId, 'refine_prd', {
+            result = await sendCommand(props.deviceId, 'refine_prd', {
                 project_slug: props.projectSlug,
                 session_id: sessionId.value,
                 prd_id: props.prdId,
@@ -210,19 +274,39 @@ async function handleSend() {
             });
         } else {
             // Create new PRD
-            await sendCommand(props.deviceId, 'new_prd', {
+            result = await sendCommand(props.deviceId, 'new_prd', {
                 project_slug: props.projectSlug,
                 session_id: sessionId.value,
                 message: text,
             });
         }
+
+        // Start timeout tracking from server response
+        if (result) {
+            const remaining = result.session_timeout_remaining;
+            if (remaining !== undefined) {
+                startTimeoutTick(remaining);
+            } else {
+                resetTimeoutTimer();
+            }
+        }
     } else {
-        // Subsequent message — send via prd_message
-        await sendCommand(props.deviceId, 'prd_message', {
+        // Subsequent message — send via prd_message (resets inactivity timer)
+        const result = await sendCommand(props.deviceId, 'prd_message', {
             project_slug: props.projectSlug,
             session_id: sessionId.value,
             message: text,
         });
+
+        // Update timeout from server response
+        if (result) {
+            const remaining = result.session_timeout_remaining;
+            if (remaining !== undefined) {
+                startTimeoutTick(remaining);
+            } else {
+                resetTimeoutTimer();
+            }
+        }
     }
 }
 
@@ -255,6 +339,7 @@ async function handleSaveAndClose() {
 
     if (result) {
         hasActiveSession.value = false;
+        clearTimeoutTimer();
         success('PRD saved');
         router.visit(`/projects/${props.projectSlug}/prds`);
     } else {
@@ -283,6 +368,7 @@ async function handleSaveAndRun() {
 
     if (result) {
         hasActiveSession.value = false;
+        clearTimeoutTimer();
 
         // Start the run
         await sendCommand(props.deviceId, 'start_run', {
@@ -296,6 +382,79 @@ async function handleSaveAndRun() {
         isSaving.value = false;
         saveAction.value = null;
     }
+}
+
+// Resume an expired session
+async function handleResume() {
+    if (isResuming.value || serverNotLive.value) return;
+
+    isResuming.value = true;
+    sessionExpired.value = false;
+
+    // Generate a new session ID for the resumed session
+    sessionId.value = generateSessionId();
+    hasActiveSession.value = true;
+
+    // Add a system message to indicate resumption
+    const systemMsg: ChatMessage = {
+        id: generateMessageId(),
+        role: 'claude',
+        content: '_Session resumed. You can continue where you left off._',
+        isStreaming: false,
+    };
+    messages.value.push(systemMsg);
+
+    // Start a new session with context from the saved PRD
+    let result;
+    if (isRefineMode.value && props.prdId) {
+        result = await sendCommand(props.deviceId, 'refine_prd', {
+            project_slug: props.projectSlug,
+            session_id: sessionId.value,
+            prd_id: props.prdId,
+            message: 'Continue from where we left off. The session timed out.',
+        });
+    } else {
+        result = await sendCommand(props.deviceId, 'new_prd', {
+            project_slug: props.projectSlug,
+            session_id: sessionId.value,
+            message: 'Continue from where we left off. The session timed out.',
+        });
+    }
+
+    if (result) {
+        isClaudeResponding.value = true;
+        const remaining = result.session_timeout_remaining;
+        if (remaining !== undefined) {
+            startTimeoutTick(remaining);
+        } else {
+            resetTimeoutTimer();
+        }
+
+        // Add Claude message placeholder for the streaming response
+        const claudeMsg: ChatMessage = {
+            id: generateMessageId(),
+            role: 'claude',
+            content: '',
+            isStreaming: true,
+        };
+        messages.value.push(claudeMsg);
+    } else {
+        sessionExpired.value = true;
+        hasActiveSession.value = false;
+        errorToast('Resume failed', 'Could not resume the session. Please try again.');
+    }
+
+    isResuming.value = false;
+    focusInput();
+}
+
+// Clear timeout timer
+function clearTimeoutTimer() {
+    if (timeoutTickInterval) {
+        clearInterval(timeoutTickInterval);
+        timeoutTickInterval = null;
+    }
+    sessionTimeoutRemaining.value = null;
 }
 
 // Back navigation with unsaved changes confirmation
@@ -313,6 +472,7 @@ function handleBack() {
             }
             sendCommand(props.deviceId, 'close_prd_session', closePayload);
             hasActiveSession.value = false;
+            clearTimeoutTimer();
             router.visit(`/projects/${props.projectSlug}/prds`);
         }
     } else {
@@ -326,6 +486,80 @@ function handleBeforeUnload(e: BeforeUnloadEvent) {
         e.preventDefault();
     }
 }
+
+// Replay buffered messages after a browser reconnection
+async function replayBufferedMessages() {
+    if (!sessionId.value || isReplayingMessages.value) return;
+
+    isReplayingMessages.value = true;
+
+    try {
+        const response = await axios.post('/ws/buffer/replay', {
+            device_id: props.deviceId,
+        });
+
+        const sessions = response.data.sessions as Record<string, Array<{ message: Record<string, unknown>; timestamp: number }>> | undefined;
+        if (!sessions) {
+            isReplayingMessages.value = false;
+            return;
+        }
+
+        // Process all buffered messages across sessions, filtering for our PRD session
+        for (const [, bufferedMessages] of Object.entries(sessions)) {
+            for (const entry of bufferedMessages) {
+                const msg = entry.message as Record<string, unknown>;
+                const type = msg.type as string;
+
+                // Only process messages for our current session
+                const msgSessionId = msg.session_id as string | undefined;
+                if (msgSessionId && msgSessionId !== sessionId.value) continue;
+
+                if (type === 'prd_output') {
+                    const text = msg.text as string;
+                    if (text) {
+                        const lastMsg = messages.value[messages.value.length - 1];
+                        if (lastMsg && lastMsg.role === 'claude' && lastMsg.isStreaming) {
+                            lastMsg.content += text;
+                        }
+                        prdContent.value = getLatestClaudeContent();
+                    }
+                } else if (type === 'prd_response_complete') {
+                    isClaudeResponding.value = false;
+                    const lastMsg = messages.value[messages.value.length - 1];
+                    if (lastMsg && lastMsg.role === 'claude') {
+                        lastMsg.isStreaming = false;
+                    }
+                    prdContent.value = getLatestClaudeContent();
+                } else if (type === 'session_expired') {
+                    isClaudeResponding.value = false;
+                    hasActiveSession.value = false;
+                    sessionExpired.value = true;
+                    clearTimeoutTimer();
+                    const lastMsg = messages.value[messages.value.length - 1];
+                    if (lastMsg && lastMsg.role === 'claude' && lastMsg.isStreaming) {
+                        lastMsg.isStreaming = false;
+                    }
+                }
+            }
+        }
+
+        nextTick(() => scrollToBottom(false));
+    } catch {
+        // Buffer replay is best-effort — don't block on failure
+    } finally {
+        isReplayingMessages.value = false;
+    }
+}
+
+// Watch for Echo reconnection to replay missed messages
+watch(echoConnected, (connected, wasConnected) => {
+    if (connected && !wasConnected && wasDisconnected.value && hasActiveSession.value) {
+        replayBufferedMessages();
+    }
+    if (!connected) {
+        wasDisconnected.value = true;
+    }
+});
 
 // Listen for streaming output from chief
 onMounted(() => {
@@ -403,6 +637,10 @@ onMounted(() => {
         if (payload.session_id !== sessionId.value) return;
 
         const minutesRemaining = payload.minutes_remaining as number;
+
+        // Update the countdown timer
+        startTimeoutTick(minutesRemaining * 60);
+
         if (minutesRemaining <= 1) {
             errorToast('Session expiring', 'Your session will expire in less than 1 minute. Save your work.');
         } else {
@@ -417,13 +655,15 @@ onMounted(() => {
 
         isClaudeResponding.value = false;
         hasActiveSession.value = false;
+        sessionExpired.value = true;
+        clearTimeoutTimer();
 
         const lastMsg = messages.value[messages.value.length - 1];
         if (lastMsg && lastMsg.role === 'claude' && lastMsg.isStreaming) {
             lastMsg.isStreaming = false;
         }
 
-        errorToast('Session expired', 'Your session has expired. Your progress has been saved.');
+        prdContent.value = getLatestClaudeContent();
     });
 
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -434,6 +674,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     window.removeEventListener('beforeunload', handleBeforeUnload);
+    clearTimeoutTimer();
     // Clean up drag listeners
     document.removeEventListener('mousemove', onDrag);
     document.removeEventListener('mouseup', stopDrag);
@@ -523,26 +764,42 @@ const saveButtonLabel = computed(() => {
                     </div>
                 </div>
 
-                <!-- Center: Mobile view toggle -->
-                <div class="flex items-center lg:hidden">
-                    <div class="flex rounded-lg border border-border p-0.5">
-                        <button
-                            class="focus-ring rounded-md px-3 py-1 text-xs font-medium transition-colors duration-[var(--duration-micro)]"
-                            :class="mobileView === 'chat' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
-                            @click="mobileView = 'chat'"
-                        >
-                            <MessageSquare class="mr-1 inline-block size-3" />
-                            Chat
-                        </button>
-                        <button
-                            class="focus-ring rounded-md px-3 py-1 text-xs font-medium transition-colors duration-[var(--duration-micro)]"
-                            :class="mobileView === 'preview' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
-                            :disabled="!hasPreviewContent"
-                            @click="mobileView = 'preview'"
-                        >
-                            <Eye class="mr-1 inline-block size-3" />
-                            Preview
-                        </button>
+                <!-- Center: Mobile view toggle + countdown timer -->
+                <div class="flex items-center gap-3">
+                    <!-- Countdown timer -->
+                    <div
+                        v-if="showTimer"
+                        class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-all duration-[var(--duration-standard)]"
+                        :class="isTimerUrgent
+                            ? 'bg-destructive/10 text-destructive scale-110'
+                            : 'text-muted-foreground'"
+                        role="timer"
+                        :aria-label="`Session expires in ${countdownText}`"
+                    >
+                        <Clock class="size-3.5" :class="{ 'animate-pulse': isTimerUrgent }" />
+                        <span :class="{ 'text-sm font-semibold': isTimerUrgent }">{{ countdownText }}</span>
+                    </div>
+
+                    <div class="flex items-center lg:hidden">
+                        <div class="flex rounded-lg border border-border p-0.5">
+                            <button
+                                class="focus-ring rounded-md px-3 py-1 text-xs font-medium transition-colors duration-[var(--duration-micro)]"
+                                :class="mobileView === 'chat' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
+                                @click="mobileView = 'chat'"
+                            >
+                                <MessageSquare class="mr-1 inline-block size-3" />
+                                Chat
+                            </button>
+                            <button
+                                class="focus-ring rounded-md px-3 py-1 text-xs font-medium transition-colors duration-[var(--duration-micro)]"
+                                :class="mobileView === 'preview' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
+                                :disabled="!hasPreviewContent"
+                                @click="mobileView = 'preview'"
+                            >
+                                <Eye class="mr-1 inline-block size-3" />
+                                Preview
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -583,6 +840,29 @@ const saveButtonLabel = computed(() => {
         >
             <AlertTriangle class="size-4 shrink-0" />
             <span>This PRD is currently in use by an active run. Changes will apply to future runs.</span>
+        </div>
+
+        <!-- Session expired banner -->
+        <div
+            v-if="sessionExpired"
+            class="flex items-center justify-between gap-2 border-b border-destructive/20 bg-destructive/5 px-4 py-3"
+        >
+            <div class="flex items-center gap-2 text-sm text-destructive">
+                <Clock class="size-4 shrink-0" />
+                <span>Session expired. Your progress has been saved.</span>
+            </div>
+            <Button
+                size="sm"
+                :disabled="serverNotLive || isResuming"
+                @click="handleResume"
+            >
+                <Loader2
+                    v-if="isResuming"
+                    class="size-4 animate-spin"
+                />
+                <RefreshCw v-else class="size-4" />
+                Resume
+            </Button>
         </div>
 
         <!-- Main content area -->
@@ -707,10 +987,10 @@ const saveButtonLabel = computed(() => {
                             <textarea
                                 ref="textareaRef"
                                 v-model="userInput"
-                                :disabled="isSaving || serverNotLive"
+                                :disabled="isSaving || serverNotLive || sessionExpired"
                                 class="focus-ring w-full resize-none rounded-xl border border-border bg-surface px-4 py-3 pr-12 text-sm text-foreground placeholder-muted-foreground transition-colors duration-[var(--duration-micro)] focus:border-primary disabled:cursor-not-allowed disabled:opacity-50 lg:pr-4"
                                 :class="{ 'opacity-50': isClaudeResponding }"
-                                :placeholder="isRefineMode ? 'Describe the changes you want to make...' : 'Describe what you want to build...'"
+                                :placeholder="sessionExpired ? 'Session expired — click Resume to continue' : (isRefineMode ? 'Describe the changes you want to make...' : 'Describe what you want to build...')"
                                 rows="1"
                                 style="overflow-y: hidden"
                                 @keydown="handleKeydown"
@@ -719,7 +999,7 @@ const saveButtonLabel = computed(() => {
                             <!-- Mobile send button (inside textarea) -->
                             <button
                                 class="focus-ring absolute bottom-2 right-2 flex items-center justify-center rounded-lg bg-primary p-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 lg:hidden"
-                                :disabled="!userInput.trim() || isClaudeResponding || isSaving || serverNotLive"
+                                :disabled="!userInput.trim() || isClaudeResponding || isSaving || serverNotLive || sessionExpired"
                                 aria-label="Send message"
                                 @click="handleSend"
                             >
@@ -730,7 +1010,7 @@ const saveButtonLabel = computed(() => {
                         <!-- Desktop send button -->
                         <Button
                             class="hidden lg:flex"
-                            :disabled="!userInput.trim() || isClaudeResponding || isSaving || serverNotLive"
+                            :disabled="!userInput.trim() || isClaudeResponding || isSaving || serverNotLive || sessionExpired"
                             @click="handleSend"
                         >
                             <Send class="size-4" />
@@ -743,6 +1023,7 @@ const saveButtonLabel = computed(() => {
                         <p class="text-[10px] text-muted-foreground">
                             <span class="hidden lg:inline">Press Enter to send, Shift+Enter for new line.</span>
                             <span v-if="serverNotLive" class="text-destructive"> Server offline — messages cannot be sent.</span>
+                            <span v-else-if="sessionExpired" class="text-destructive"> Session expired — click Resume to continue.</span>
                             <span v-else-if="isClaudeResponding" class="text-primary"> Claude is thinking...</span>
                         </p>
                     </div>
