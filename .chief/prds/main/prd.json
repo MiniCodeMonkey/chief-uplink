@@ -487,7 +487,8 @@
         "Output is monospace (Geist Mono)"
       ],
       "priority": 25,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-026",

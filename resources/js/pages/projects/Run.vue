@@ -15,6 +15,7 @@ import {
     XCircle,
 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import ClaudeOutputPanel from '@/components/ClaudeOutputPanel.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -98,6 +99,11 @@ const hasActiveRun = computed(() =>
     isStarting.value || isPausing.value || isResuming.value || isStopping.value,
 );
 
+// Show output panel when there's an active run or when output chunks exist
+const showOutputPanel = computed(() =>
+    hasActiveRun.value || outputChunks.value.length > 0,
+);
+
 // Show Start when no run is active (idle, no_prd, error — not transitioning)
 const showStartButton = computed(() =>
     !hasActiveRun.value && effectiveStatus.value !== 'starting',
@@ -121,6 +127,15 @@ const showStopButton = computed(() =>
 
 // Controls are disabled when offline
 const controlsDisabled = computed(() => !isOnline.value);
+
+// Claude output streaming state
+interface OutputChunk {
+    storyId: string | null;
+    text: string;
+}
+const outputChunks = ref<OutputChunk[]>([]);
+const mobileOutputCollapsed = ref(false);
+const currentOutputStoryId = ref<string | null>(null);
 
 const stories = computed(() => props.project.story_details ?? []);
 
@@ -156,6 +171,34 @@ onMounted(() => {
         } else if (optimisticState.value) {
             triggerShake();
             optimisticState.value = null;
+        }
+    });
+
+    // Listen for Claude output streaming
+    on('claude_output', (message) => {
+        const payload = message.message as Record<string, unknown>;
+        const text = (payload.text as string) ?? '';
+        const storyId = (payload.story_id as string) ?? currentOutputStoryId.value;
+
+        if (storyId !== currentOutputStoryId.value) {
+            currentOutputStoryId.value = storyId;
+        }
+
+        if (text) {
+            outputChunks.value.push({
+                storyId,
+                text,
+            });
+        }
+    });
+
+    // Clear output when a new run starts
+    on('run_progress', (message) => {
+        const payload = message.message as Record<string, unknown>;
+        // If stories_completed is 0, this is likely the beginning of a new run
+        if (payload.stories_completed === 0 && outputChunks.value.length > 0) {
+            outputChunks.value = [];
+            currentOutputStoryId.value = null;
         }
     });
 });
@@ -321,7 +364,7 @@ function scrollToOutput() {
             <!-- Story List Panel (left on desktop, full on mobile) -->
             <div
                 class="flex flex-col border-border lg:w-1/2 lg:border-r"
-                :class="{ 'lg:w-full': !hasActiveRun }"
+                :class="{ 'lg:w-full': !showOutputPanel }"
             >
                 <!-- Run Control Bar -->
                 <div
@@ -662,18 +705,16 @@ function scrollToOutput() {
 
             <!-- Claude Output Panel (right on desktop, below on mobile) -->
             <div
-                v-if="hasActiveRun"
+                v-if="showOutputPanel"
                 id="claude-output"
                 class="flex flex-col border-t border-border lg:w-1/2 lg:border-t-0"
             >
-                <div class="border-b border-border px-4 py-3">
-                    <h3 class="text-sm font-medium">Claude Output</h3>
-                </div>
-                <div class="flex-1 p-4">
-                    <p class="text-sm text-muted-foreground">
-                        Live Claude output streaming will be implemented in a future story.
-                    </p>
-                </div>
+                <ClaudeOutputPanel
+                    v-model:is-collapsed="mobileOutputCollapsed"
+                    :device-id="deviceId"
+                    :chunks="outputChunks"
+                    :has-active-run="hasActiveRun"
+                />
             </div>
         </div>
 

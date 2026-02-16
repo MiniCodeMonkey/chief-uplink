@@ -78,6 +78,8 @@
 - Run controls use optimistic UI: `optimisticState` ref overrides server status, cleared by WebSocket events (`run_progress`, `run_complete`, `run_paused`) or server prop changes
 - Run commands sent via `useCommandRelay.sendCommand()` which has built-in 300ms debounce — no extra double-click protection needed
 - `.shake` CSS class (not `animate-shake`) for error rollback animation
+- `claude_output` WebSocket message payload: `{ text: "...", story_id: "US-001" }` — text is streamed content, story_id tracks current story
+- ClaudeOutputPanel component: receives `chunks` array, animates text via requestAnimationFrame, handles auto-scroll/jump-to-bottom
 
 ---
 
@@ -932,5 +934,38 @@
   - TooltipProvider must wrap all Tooltip components — place it once in the control bar container
   - Vue `<Transition>` with `v-if` on buttons creates smooth crossfade between control states (start → pause+stop, etc.)
   - The ConfirmDialog component uses `v-model:open` for two-way binding with the dialog visibility state
+
+---
+
+## 2026-02-16 - US-025
+- What was implemented:
+  - Live Claude Output Streaming panel integrated into the Run tab
+  - `ClaudeOutputPanel` component: shows streaming text as it arrives via WebSocket `claude_output` messages
+  - Character-by-character smooth animation using `requestAnimationFrame` with batch rendering (5-15 chars per frame)
+  - Auto-scroll to bottom as new content arrives; pauses auto-scroll if user scrolls up
+  - "Jump to bottom" floating button appears when auto-scroll is paused, with smooth enter/leave transitions
+  - Story separators: when the story ID changes in output chunks, a visual divider with story ID badge is shown
+  - Mobile: collapsible section below the story list with chevron toggle, expanded by default during active run
+  - Desktop: output panel on the right side (lg:w-1/2 split layout)
+  - Output displayed in monospace font (Geist Mono) with proper whitespace handling (`whitespace-pre-wrap`)
+  - Empty state: "Waiting for Claude output..." when run is active but no output received yet
+  - Output panel remains visible after run completes (while chunks exist) via `showOutputPanel` computed
+  - WebSocket integration: `claude_output` messages captured with story_id context tracking
+  - Output cleared when a new run starts (detected via `run_progress` with stories_completed=0)
+  - 8 new tests covering: deviceId prop for WebSocket subscription, all project statuses (running/paused/error/idle), story details with in-progress context, access control
+  - All 343 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - resources/js/components/ClaudeOutputPanel.vue (new: Claude output streaming panel with animation, auto-scroll, story separators)
+  - resources/js/pages/projects/Run.vue (updated: integrated ClaudeOutputPanel, added claude_output WebSocket handler, output chunks state)
+  - tests/Feature/Projects/ClaudeOutputStreamingTest.php (new: 8 tests)
+  - .chief/prds/main/prd.json (updated: US-025 passes: true)
+- **Learnings for future iterations:**
+  - `requestAnimationFrame` for character-by-character animation gives smooth rendering without layout jank — batch 5-15 chars per frame for natural feel
+  - Auto-scroll detection uses `scrollHeight - scrollTop - clientHeight < 50` threshold — 50px "near bottom" zone prevents accidental scroll pause
+  - `claude_output` WebSocket messages have `text` (content) and `story_id` (current story context) in payload
+  - Multiple `on()` handlers for the same event type (e.g., two `run_progress` handlers) both fire independently — works correctly for separating concerns
+  - `showOutputPanel` should be separate from `hasActiveRun` — output should persist after run completes while chunks exist
+  - Mobile collapsible uses `v-show` (not `v-if`) to preserve scroll position and avoid remounting
+  - `<pre>` element with `whitespace-pre-wrap` and `break-words` is ideal for monospace output display
 
 ---
