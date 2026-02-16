@@ -1951,3 +1951,19 @@
   - `vi.advanceTimersByTime()` requires `vi.useFakeTimers()` to be called first in the test file
   - Inertia.js components need full mock of `@inertiajs/vue3` module (`router`, `usePage`) for test isolation
 ---
+
+## US-054: Feature & Integration Tests — Completed
+- **What was done:** Created 6 comprehensive integration test files covering gaps in test coverage
+- **New test files created:**
+  - tests/Feature/Integration/PrdSessionLifecycleTest.php — PRD session creation, messages, close, timeout/expiry, refinement, multiple sessions (10 tests)
+  - tests/Feature/Integration/RunLifecycleTest.php — Run commands via WebSocket relay, progress events, run history rendering, story details (16 tests)
+  - tests/Feature/Integration/ProjectCrudTest.php — clone_repo/create_project commands, rate limiting, get_diffs/get_settings/update_settings, project detail pages, authorization (20 tests)
+  - tests/Feature/Integration/AccountDeletionTest.php — Data cleanup, PII removal, soft-delete, validation, push subscription cleanup (11 tests)
+  - tests/Feature/Integration/OfflineCachedStateTest.php — Dashboard/project offline rendering, connection status transitions, empty states (11 tests)
+  - tests/Feature/Integration/RateLimitingEnforcementTest.php — OAuth, browser command, clone/create, cloud deploy, token refresh rate limits (10 tests)
+- **Test results:** 78 new tests, 529 assertions, all passing in ~2s; full suite 730 tests in ~14s
+- **Learnings for future iterations:**
+  - Account deletion only sets `revoked_at` on devices, not `is_online` — don't assert `is_online` changes
+  - Token refresh rate limit tests need careful assertion design — track `$rateLimited` boolean to avoid "risky test" warnings
+  - Helper functions generating access tokens must have unique names per test file to avoid Pest conflicts
+---

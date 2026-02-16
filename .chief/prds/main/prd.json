@@ -1066,7 +1066,8 @@
         "Tests run in under 60 seconds"
       ],
       "priority": 54,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-055",
