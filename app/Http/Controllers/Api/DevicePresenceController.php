@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Events\DeviceConnected;
+use App\Events\DeviceDisconnected;
 use App\Http\Controllers\Controller;
 use App\Models\DeviceAuthorization;
 use App\Services\WebSocketMessageBuffer;
@@ -96,6 +97,46 @@ class DevicePresenceController extends Controller
                 'port' => $reverbApp['port'] ?? 443,
                 'scheme' => $reverbApp['scheme'] ?? 'https',
             ],
+        ]);
+    }
+
+    /**
+     * POST /api/device/disconnect
+     *
+     * Mark a device as offline and start the buffer grace period.
+     */
+    public function disconnect(Request $request): JsonResponse
+    {
+        /** @var DeviceAuthorization $device */
+        $device = $request->attributes->get('device_authorization');
+        $deviceId = $request->attributes->get('device_id');
+        $userId = $request->attributes->get('user_id');
+
+        // Start buffer grace period
+        try {
+            $this->messageBuffer->markDisconnected($deviceId);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to mark device disconnected in buffer', [
+                'device_id' => $deviceId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        // Mark device as offline
+        $device->update([
+            'is_online' => false,
+        ]);
+
+        // Broadcast device disconnected event to user's browser channel
+        DeviceDisconnected::dispatch($deviceId, $userId);
+
+        Log::info('Device disconnected via HTTP', [
+            'device_id' => $deviceId,
+            'user_id' => $userId,
+        ]);
+
+        return response()->json([
+            'status' => 'disconnected',
         ]);
     }
 }

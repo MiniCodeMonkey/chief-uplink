@@ -72,4 +72,6 @@ Route::middleware(['device.auth', 'throttle:general-api'])->group(function () {
 Route::prefix('device')->middleware(['device.api'])->group(function () {
     Route::post('/connect', [\App\Http\Controllers\Api\DevicePresenceController::class, 'connect'])
         ->name('device.connect');
+    Route::post('/disconnect', [\App\Http\Controllers\Api\DevicePresenceController::class, 'disconnect'])
+        ->name('device.disconnect');
 });
