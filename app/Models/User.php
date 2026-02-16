@@ -79,4 +79,12 @@ class User extends Authenticatable
     {
         return $this->hasMany(OauthDeviceCode::class);
     }
+
+    /**
+     * @return HasMany<ProviderApiKey, $this>
+     */
+    public function providerApiKeys(): HasMany
+    {
+        return $this->hasMany(ProviderApiKey::class);
+    }
 }

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\CloudProviderKeyController;
 use App\Http\Controllers\Settings\DeviceController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Middleware\EnsureEmailProvided;
@@ -17,6 +18,10 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
 
     Route::get('settings/devices', [DeviceController::class, 'index'])->name('devices.index');
     Route::delete('settings/devices/{id}', [DeviceController::class, 'destroy'])->name('devices.destroy');
+
+    Route::get('settings/cloud-servers', [CloudProviderKeyController::class, 'index'])->name('cloud-servers.index');
+    Route::post('settings/cloud-servers', [CloudProviderKeyController::class, 'store'])->name('cloud-servers.store');
+    Route::delete('settings/cloud-servers/{id}', [CloudProviderKeyController::class, 'destroy'])->name('cloud-servers.destroy');
 
     Route::get('settings/appearance', function () {
         return Inertia::render('settings/Appearance');
