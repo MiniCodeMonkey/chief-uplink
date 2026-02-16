@@ -14,6 +14,7 @@ import {
     X,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import CloneRepositoryModal from '@/components/CloneRepositoryModal.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -34,6 +35,7 @@ const { sendCommand } = useCommandRelay();
 const { isOnline, isOffline, isNeverConnected, selectedDevice, statusText } = useConnectionStatus();
 
 const newMenuOpen = ref(false);
+const cloneModalOpen = ref(false);
 const longPressTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const longPressProjectSlug = ref<string | null>(null);
 const offlineBannerDismissed = ref(false);
@@ -257,7 +259,7 @@ const isLoading = computed(() => page.props.devices === undefined);
                                 :disabled="!isOnline"
                                 :class="{ 'opacity-50 cursor-not-allowed': !isOnline }"
                                 :title="!isOnline ? 'Server offline' : undefined"
-                                @click="newMenuOpen = false"
+                                @click="newMenuOpen = false; cloneModalOpen = true"
                             >
                                 <GitFork class="size-4 text-muted-foreground" />
                                 Clone Repository
@@ -495,6 +497,14 @@ const isLoading = computed(() => page.props.devices === undefined);
                 </div>
             </Teleport>
         </div>
+
+        <!-- Clone Repository Modal -->
+        <CloneRepositoryModal
+            v-if="currentDevice"
+            v-model:open="cloneModalOpen"
+            :device-id="currentDevice.id"
+            :is-online="isOnline"
+        />
     </AppLayout>
 </template>
 

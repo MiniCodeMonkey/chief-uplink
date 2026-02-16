@@ -680,7 +680,8 @@
         "Cancel button aborts the clone"
       ],
       "priority": 35,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-036",

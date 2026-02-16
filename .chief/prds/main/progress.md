@@ -99,6 +99,12 @@
 - Save & Run flow in PrdChat: `handleSaveAndRunClick()` checks `hasActiveRun` prop → confirmation dialog if active → `executeSaveAndRun()` does two-step: close_prd_session then start_run
 - `hasActiveRun` prop passed to PrdChat from both `prdCreate` and `prdRefine` controller methods — checks `status in ['running', 'paused']`
 - Multi-step save loading state uses `saveStep` ref ('saving' | 'starting') alongside `saveAction` ref ('close' | 'run') for detailed button labels
+- diff2html has built-in dark mode via `d2h-dark-color-scheme` class — toggle based on `document.documentElement.classList.contains('dark')`
+- DiffFileTree uses separate SFC (DiffFileTreeNode.vue) for recursive tree rendering to avoid TypeScript self-reference type issues with `defineComponent`
+- diff2html CSS imported via `@import 'diff2html/bundles/css/diff2html.min.css'` in component `<style>` block
+- File tree collapses single-child directory chains (e.g., `src/components` instead of `src` > `components`) for cleaner display
+- Mobile full-screen modal pattern: add `max-sm:fixed max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:top-0 max-sm:left-0 max-sm:max-w-none max-sm:rounded-none max-sm:border-0 max-sm:h-full max-sm:w-full` to DialogContent
+- `clone_progress` / `clone_complete` WebSocket message types for clone operations — subscribe via `useChiefMessages` when modal opens
 
 ---
 
@@ -1240,4 +1246,58 @@
   - Failed stories are displayed but with disabled accordion (no diffs available for failed stories)
   - The `diffs_response` WebSocket message includes `project_slug` for filtering — important when multiple projects are open
   - `loadingStoryId` ref tracks which story is currently being fetched — allows inline spinner on the correct accordion header
+---
+
+## 2026-02-16 - US-034
+- What was implemented:
+  - Syntax-highlighted diff viewer using diff2html library with line-by-line unified diff format, line numbers, additions (green), deletions (red), and word-level diff highlighting
+  - DiffFileViewer.vue component: renders file diffs with diff2html, dark/light mode support via MutationObserver on `<html>` class, CopyButton for full diff, large diff truncation (5000+ lines) with "Show full diff" option
+  - DiffFileTree.vue + DiffFileTreeNode.vue: hierarchical file tree sidebar for desktop showing changed files grouped by directory, with single-child directory chain collapsing (e.g., `src/components` instead of nested), addition/deletion counts per file/directory
+  - Updated Diffs.vue with split layout: desktop shows file tree sidebar (w-64) on left + diff viewer on right; mobile shows file list with tap-to-select and back button navigation
+  - Auto-selects first file when story diff loads; maintains file selection state per expanded story
+  - diff2html CSS integrated with theme overrides for both light and dark modes
+- Files changed:
+  - resources/js/components/DiffFileViewer.vue (new) - File diff rendering with diff2html
+  - resources/js/components/DiffFileTree.vue (new) - File tree sidebar with directory grouping
+  - resources/js/components/DiffFileTreeNode.vue (new) - Recursive tree node component
+  - resources/js/pages/projects/Diffs.vue (modified) - Added file selection, tree sidebar, diff viewer integration
+  - .chief/prds/main/prd.json (modified) - Marked US-034 as passing
+- **Learnings for future iterations:**
+  - diff2html's `html()` function generates complete HTML with classes for styling — use `drawFileList: false` to skip the built-in file list (we have our own)
+  - Recursive Vue SFC components work naturally in `<template>` but `defineComponent` in `<script setup>` causes TypeScript self-reference issues — split into separate SFC instead
+  - diff2html already has built-in dark mode class (`d2h-dark-color-scheme`) — just toggle it based on `.dark` class on `<html>`
+  - Use MutationObserver on `document.documentElement` to reactively detect theme changes
+  - diff2html CSS can be imported directly from `diff2html/bundles/css/diff2html.min.css` in a Vue component's `<style>` block
+---
+
+## 2026-02-16 - US-035
+- What was implemented:
+  - Clone Repository modal/full-screen page accessible from Dashboard's "+ New" dropdown
+  - `CloneRepositoryModal.vue` component with Dialog-based UI: modal on desktop (sm:max-w-lg), full-screen on mobile (max-sm:fixed inset-0)
+  - Repository URL input field with auto-focus on open, URL validation on blur (HTTPS and SSH URL formats), green checkmark indicator for valid URLs
+  - Directory name field auto-populated from URL in real-time (extracts repo name from URL, strips `.git` suffix), editable by user
+  - Info text about private repo SSH key requirements
+  - Clone progress streaming: Spinner with "Cloning repository..." text, ProgressBar for percentage-based progress, monospace output log area for git clone output
+  - Clone progress received via `clone_progress` WebSocket messages with `output` (text) and `percentage` (number) payload fields
+  - Clone completion via `clone_complete` WebSocket message — on success navigates to new project's Overview page, on error shows actionable error messages
+  - Error suggestions for common failures: authentication issues ("Ensure the server's SSH key has access"), not found errors ("Check the repository URL")
+  - Cancel button during cloning operation
+  - "Try again" button on error to reset and retry
+  - Disabled when server is offline (button disabled in dropdown, modal enforces `isOnline` prop)
+  - Dashboard.vue updated: "Clone Repository" dropdown button wired to open `CloneRepositoryModal`
+  - `clone_repo` command type already existed in both `CommandRelayController::VALID_COMMANDS` and `useCommandRelay` `CommandType` union — no backend changes needed
+  - All 375 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - resources/js/components/CloneRepositoryModal.vue (new: clone repository modal with form, progress streaming, error handling)
+  - resources/js/pages/Dashboard.vue (updated: import CloneRepositoryModal, wire up clone button, add modal state)
+  - .chief/prds/main/prd.json (updated: US-035 passes: true)
+- **Learnings for future iterations:**
+  - `clone_repo` command type was already defined in both PHP (`CommandRelayController::VALID_COMMANDS`) and TS (`useCommandRelay` `CommandType`) — no backend changes needed
+  - Mobile full-screen modal achieved with `max-sm:fixed max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:top-0 max-sm:left-0 max-sm:max-w-none max-sm:rounded-none max-sm:border-0 max-sm:h-full max-sm:w-full` classes on DialogContent
+  - `useChiefMessages` requires `subscribe()` call to start receiving messages — call when modal opens, `unsubscribe()` when it closes
+  - URL validation accepts both HTTPS (`https://...`) and SSH (`git@...:...`) patterns — simple regex sufficient for client-side validation
+  - Auto-fill directory name from URL: strip `.git`, strip trailing slashes, take last path segment; for SSH URLs handle `:` separator
+  - `clone_progress` messages have `output` (string, appended to log) and `percentage` (number, drives progress bar) in payload
+  - `clone_complete` messages have optional `error` (string) and `project_slug` (string) in payload for success/failure handling
+  - The Dialog `@update:open` handler needs both cancel logic AND the emit — pattern: `(val) => { if (!val) handleCancel(); emit('update:open', val); }`
 ---
