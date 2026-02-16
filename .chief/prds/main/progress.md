@@ -150,6 +150,11 @@
 - For non-Link elements, use `router.prefetch(url)` on `@mouseenter` for the same effect
 - Inertia progress bar styled via `#nprogress .bar` / `#nprogress .peg` CSS selectors in `app.css`
 - `content-reveal` CSS class provides fade+slide-up animation for content replacing skeletons
+- Mobile fullscreen modal: add `max-sm:fixed max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:top-0 max-sm:left-0 max-sm:max-w-none max-sm:rounded-none max-sm:border-0 max-sm:h-full max-sm:w-full` to DialogContent
+- Pull-to-refresh: use `usePullToRefresh` composable — returns `isRefreshing`, `pullDistance`, `isPulling` refs
+- Long-press discoverability: use `useLongPressHint` composable — `showHint` computed, `markFeatureUsed()` on trigger
+- Page transitions: `usePageTransitions` composable tracks navigation direction — singleton initialized in `app.ts`
+- Always add `inputmode` alongside `type` for mobile inputs: `inputmode="email"`, `inputmode="url"`, `inputmode="numeric"`
 
 ---
 
@@ -1813,4 +1818,41 @@
   - Pre-existing TS errors exist across many files — not blocking for builds/tests
   - Inertia progress bar uses NProgress under the hood — can be styled via `#nprogress .bar` and `#nprogress .peg` CSS
   - `content-reveal` animation works with prefers-reduced-motion since the global reduced motion rule sets all animation-durations to near-zero
+---
+
+## 2026-02-16 - US-050
+- What was implemented:
+  - Long-press context menus with discoverability hints: `useLongPressHint` composable tracks visits via localStorage, shows "Hold for options" text + `...` icon for first 3 visits, then hides. `markFeatureUsed()` called when long-press triggers
+  - Pull-to-refresh on dashboard and run tab: `usePullToRefresh` composable with touch event handling, resistance physics, and Inertia.js `router.reload()` integration. Shows "Pull to refresh" / "Release to refresh" / "Refreshing..." indicator
+  - Bottom tab bar safe area insets already implemented (`env(safe-area-inset-bottom)`) — verified working
+  - Touch target audit: fixed dashboard dismiss button from `size-6` to `size-8 sm:size-6`, added CSS rule for dialog close buttons (`min-width: 44px; min-height: 44px` at `max-width: 639px`)
+  - Directional page transitions: `usePageTransitions` composable tracks navigation direction via history stack and Inertia events. CSS classes for forward (slide left) and back (slide right) transitions at `max-width: 1023px`
+  - Mobile keyboard types: added `inputmode="email"` to EmailCapture and Profile email inputs, `inputmode="url"` to CloneRepository URL input, `inputmode="numeric"` to Settings max_iterations input
+  - Full-screen modals on mobile: added `max-sm:` fullscreen classes to DeleteUser and TwoFactorSetupModal dialogs (CloneRepository and CreateProject already had them)
+  - Hover-only interactions verified: Dashboard cards have long-press mobile equivalent, PrdChat divider is desktop-only with mobile toggle, sidebar actions have focus-within fallback
+  - Viewport meta tag updated with `maximum-scale=5, user-scalable=yes` to prevent zoom on input focus while allowing user zoom
+  - Smooth scrolling: CSS `scroll-behavior: smooth` and `-webkit-overflow-scrolling: touch` on html and overflow containers
+- Files changed:
+  - resources/js/composables/useLongPressHint.ts (new)
+  - resources/js/composables/usePullToRefresh.ts (new)
+  - resources/js/composables/usePageTransitions.ts (new)
+  - resources/js/pages/Dashboard.vue (pull-to-refresh, long-press hints, touch target fix)
+  - resources/js/pages/projects/Run.vue (pull-to-refresh)
+  - resources/js/app.ts (page transitions initialization)
+  - resources/css/app.css (smooth scrolling, touch targets, directional transitions)
+  - resources/views/app.blade.php (viewport meta tag)
+  - resources/js/pages/auth/EmailCapture.vue (inputmode)
+  - resources/js/pages/settings/Profile.vue (inputmode)
+  - resources/js/pages/projects/Settings.vue (inputmode)
+  - resources/js/components/CloneRepositoryModal.vue (inputmode)
+  - resources/js/components/DeleteUser.vue (mobile fullscreen dialog)
+  - resources/js/components/TwoFactorSetupModal.vue (mobile fullscreen dialog)
+  - .chief/prds/main/prd.json (story status)
+- **Learnings for future iterations:**
+  - `usePullToRefresh` composable uses `router.reload()` for data refresh — works with Inertia props automatically
+  - `useLongPressHint` uses localStorage key `chief:longpress-hint` — counter incremented per visit, feature marked used on long-press trigger
+  - `usePageTransitions` tracks a history stack at module scope (singleton pattern) — initialized once via `initialized` flag, cleanup via HMR dispose
+  - Mobile fullscreen modal pattern: `max-sm:fixed max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:top-0 max-sm:left-0 max-sm:max-w-none max-sm:rounded-none max-sm:border-0 max-sm:h-full max-sm:w-full`
+  - Dialog close button touch target: use `[data-slot='dialog-close']` CSS selector for minimum size enforcement on mobile
+  - `inputmode` attribute is separate from `type` — both should be set for best mobile keyboard behavior
 ---
