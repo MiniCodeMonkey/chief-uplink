@@ -96,6 +96,9 @@
 - PRD session Redis keys: `prd:session:{session_id}` (hash), `prd:device:{device_id}:sessions` (set), `prd:sessions:expiring` (sorted set)
 - `CommandResponse` type in `useCommandRelay.ts` includes `session_timeout_remaining?` — returned by server for PRD session commands
 - `WebSocketMessageBuffer::BUFFERABLE_TYPES` includes `prd_output`, `prd_response_complete`, `session_expired` for browser reconnection replay
+- Save & Run flow in PrdChat: `handleSaveAndRunClick()` checks `hasActiveRun` prop → confirmation dialog if active → `executeSaveAndRun()` does two-step: close_prd_session then start_run
+- `hasActiveRun` prop passed to PrdChat from both `prdCreate` and `prdRefine` controller methods — checks `status in ['running', 'paused']`
+- Multi-step save loading state uses `saveStep` ref ('saving' | 'starting') alongside `saveAction` ref ('close' | 'run') for detailed button labels
 
 ---
 
@@ -1185,4 +1188,25 @@
   - The `CommandResponse` interface must be exported when other components need to access its properties (TS2352 error otherwise)
   - `ChiefMessageReceived::dispatch()` can be used from backend services to send events to browser without going through the chief server WebSocket
   - PRD session cleanup happens in three ways: explicit close_prd_session, timeout expiry via scheduler, and device disconnect cleanup
+---
+
+## 2026-02-16 - US-032
+- What was implemented:
+  - Save & Run flow in PRD chat: complete two-step save → start run workflow
+  - "Save & Run" dropdown option sends `close_prd_session` (save: true) then `start_run` sequentially
+  - Active run detection: if a run is already in progress, shows confirmation dialog "A run is already in progress. Stop it and start a new one?" before proceeding
+  - `hasActiveRun` prop now passed to both `prdCreate` and `prdRefine` controller methods (was only on refine before)
+  - Multi-step loading state: button shows "Saving PRD..." during close_prd_session, then "Starting run..." during start_run
+  - PRD ID passed to `start_run` command in refine mode so chief knows which PRD to run
+  - Error handling: if start_run fails after save, shows error toast with actionable message and navigates to Run tab
+  - ConfirmDialog component imported and wired for active run confirmation
+  - All 375 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - app/Http/Controllers/ProjectController.php (updated: prdCreate now passes hasActiveRun prop)
+  - resources/js/pages/projects/PrdChat.vue (updated: Save & Run with confirmation dialog, multi-step loading, error handling, prd_id passing)
+- **Learnings for future iterations:**
+  - The `hasActiveRun` prop was only on `prdRefine` before — `prdCreate` also needs it for the Save & Run confirmation dialog
+  - `executeSaveAndRun()` is separate from `handleSaveAndRunClick()` to allow the confirmation dialog to call it directly
+  - `saveStep` ref tracks the current step within a multi-step save action (saving vs starting) for granular button labels
+  - The Save & Run flow navigates to the Run tab even on start_run failure — user can retry from there
 ---

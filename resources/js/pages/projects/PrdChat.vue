@@ -17,6 +17,7 @@ import {
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import PrdPreviewPanel from '@/components/PrdPreviewPanel.vue';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -63,8 +64,10 @@ const sessionId = ref<string | null>(null);
 const hasActiveSession = ref(false);
 const isSaving = ref(false);
 const saveAction = ref<'close' | 'run' | null>(null);
+const saveStep = ref<'saving' | 'starting' | null>(null);
 const sessionExpired = ref(false);
 const isResuming = ref(false);
+const showRunConfirm = ref(false);
 
 // Session timeout tracking
 const sessionTimeoutRemaining = ref<number | null>(null);
@@ -325,6 +328,7 @@ async function handleSaveAndClose() {
 
     isSaving.value = true;
     saveAction.value = 'close';
+    saveStep.value = 'saving';
 
     const closePayload: Record<string, unknown> = {
         project_slug: props.projectSlug,
@@ -346,14 +350,29 @@ async function handleSaveAndClose() {
         errorToast('Save failed', 'Failed to save the PRD. Please try again.');
         isSaving.value = false;
         saveAction.value = null;
+        saveStep.value = null;
     }
 }
 
-async function handleSaveAndRun() {
+function handleSaveAndRunClick() {
+    if (!hasActiveSession.value || isSaving.value) return;
+
+    // If another run is active, show confirmation dialog
+    if (props.hasActiveRun) {
+        showRunConfirm.value = true;
+        return;
+    }
+
+    executeSaveAndRun();
+}
+
+async function executeSaveAndRun() {
+    showRunConfirm.value = false;
     if (!hasActiveSession.value || isSaving.value) return;
 
     isSaving.value = true;
     saveAction.value = 'run';
+    saveStep.value = 'saving';
 
     const closePayload: Record<string, unknown> = {
         project_slug: props.projectSlug,
@@ -364,23 +383,42 @@ async function handleSaveAndRun() {
         closePayload.prd_id = props.prdId;
     }
 
-    const result = await sendCommand(props.deviceId, 'close_prd_session', closePayload);
+    const closeResult = await sendCommand(props.deviceId, 'close_prd_session', closePayload);
 
-    if (result) {
-        hasActiveSession.value = false;
-        clearTimeoutTimer();
-
-        // Start the run
-        await sendCommand(props.deviceId, 'start_run', {
-            project_slug: props.projectSlug,
-        });
-
-        success('PRD saved — starting run');
-        router.visit(`/projects/${props.projectSlug}/run`);
-    } else {
+    if (!closeResult) {
         errorToast('Save failed', 'Failed to save the PRD. Please try again.');
         isSaving.value = false;
         saveAction.value = null;
+        saveStep.value = null;
+        return;
+    }
+
+    hasActiveSession.value = false;
+    clearTimeoutTimer();
+
+    // Step 2: Start the run
+    saveStep.value = 'starting';
+
+    const startPayload: Record<string, unknown> = {
+        project_slug: props.projectSlug,
+    };
+    // Pass the PRD ID so chief knows which PRD to run
+    if (isRefineMode.value && props.prdId) {
+        startPayload.prd_id = props.prdId;
+    }
+
+    const startResult = await sendCommand(props.deviceId, 'start_run', startPayload);
+
+    if (startResult) {
+        success('PRD saved — starting run');
+        router.visit(`/projects/${props.projectSlug}/run`);
+    } else {
+        errorToast(
+            'Run failed to start',
+            'PRD was saved but the run could not start. Check the PRD and try again from the Run tab.',
+        );
+        // Navigate to run tab so user can see the error and retry
+        router.visit(`/projects/${props.projectSlug}/run`);
     }
 }
 
@@ -735,7 +773,10 @@ const renderedMarkdown = computed(() => {
 // Save button label
 const saveButtonLabel = computed(() => {
     if (isSaving.value) {
-        return saveAction.value === 'run' ? 'Saving & starting...' : 'Saving...';
+        if (saveAction.value === 'run') {
+            return saveStep.value === 'starting' ? 'Starting run...' : 'Saving PRD...';
+        }
+        return 'Saving...';
     }
     return 'Save';
 });
@@ -824,7 +865,7 @@ const saveButtonLabel = computed(() => {
                             <DropdownMenuItem @click="handleSaveAndClose">
                                 Save & Close
                             </DropdownMenuItem>
-                            <DropdownMenuItem @click="handleSaveAndRun">
+                            <DropdownMenuItem @click="handleSaveAndRunClick">
                                 Save & Run
                             </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -1064,6 +1105,18 @@ const saveButtonLabel = computed(() => {
                 />
             </div>
         </div>
+
+        <!-- Active run confirmation dialog -->
+        <ConfirmDialog
+            v-model:open="showRunConfirm"
+            title="A run is already in progress"
+            description="Stop the current run and start a new one with this PRD?"
+            confirm-label="Stop & Start New Run"
+            cancel-label="Cancel"
+            variant="destructive"
+            @confirm="executeSaveAndRun"
+            @cancel="showRunConfirm = false"
+        />
     </div>
 </template>
 

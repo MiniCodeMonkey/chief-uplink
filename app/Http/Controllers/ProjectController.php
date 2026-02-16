@@ -129,11 +129,14 @@ class ProjectController extends Controller
     {
         $project = $this->findProject($request, $slug);
 
+        $hasActiveRun = in_array($project->status, ['running', 'paused']);
+
         return Inertia::render('projects/PrdChat', [
             'projectSlug' => $project->project_slug,
             'projectName' => $project->project_name,
             'deviceId' => $project->device_authorization_id,
             'mode' => 'create',
+            'hasActiveRun' => $hasActiveRun,
         ]);
     }
 
