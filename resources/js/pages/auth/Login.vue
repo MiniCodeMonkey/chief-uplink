@@ -4,6 +4,7 @@ import { ref, onMounted } from 'vue';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { github } from '@/routes/auth';
 
 defineProps<{
     status?: string;
@@ -14,7 +15,7 @@ const signInButton = ref<HTMLElement | null>(null);
 
 function signInWithGitHub() {
     isLoading.value = true;
-    router.visit(route('auth.github'));
+    router.visit(github.url());
 }
 
 onMounted(() => {

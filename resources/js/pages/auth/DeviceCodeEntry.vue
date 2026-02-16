@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { verify, authorize, deny } from '@/routes/oauth/device';
 
 const props = defineProps<{
     confirmDevice?: {
@@ -18,7 +19,7 @@ const props = defineProps<{
 const page = usePage();
 const successDevice = computed(() => page.props.flash?.success as string | undefined);
 
-const codeInput = ref<HTMLInputElement | null>(null);
+const codeInput = ref<InstanceType<typeof Input> | null>(null);
 
 const verifyForm = useForm({
     user_code: props.confirmDevice?.user_code ?? '',
@@ -54,7 +55,8 @@ function onInput(event: Event) {
 
     // Adjust cursor position after formatting
     nextTick(() => {
-        if (codeInput.value) {
+        const el = codeInput.value?.$el as HTMLInputElement | undefined;
+        if (el) {
             let newPos = cursorPos;
             // If we just typed the 4th character, skip past the hyphen
             if (cursorPos === 5 && formatted.length >= 5 && oldValue.length < formatted.length) {
@@ -62,7 +64,7 @@ function onInput(event: Event) {
             }
             // Ensure cursor doesn't exceed length
             newPos = Math.min(newPos, formatted.length);
-            codeInput.value.setSelectionRange(newPos, newPos);
+            el.setSelectionRange(newPos, newPos);
         }
     });
 }
@@ -75,17 +77,17 @@ function onPaste(event: ClipboardEvent) {
 }
 
 function submitCode() {
-    verifyForm.post(route('oauth.device.verify'), {
+    verifyForm.post(verify.url(), {
         preserveScroll: true,
     });
 }
 
 function authorizeDevice() {
-    authorizeForm.post(route('oauth.device.authorize'));
+    authorizeForm.post(authorize.url());
 }
 
 function denyDevice() {
-    denyForm.post(route('oauth.device.deny'));
+    denyForm.post(deny.url());
 }
 
 function resetForm() {
@@ -93,7 +95,7 @@ function resetForm() {
     verifyForm.clearErrors();
     showSuccess.value = false;
     nextTick(() => {
-        codeInput.value?.focus();
+        (codeInput.value?.$el as HTMLInputElement | undefined)?.focus();
     });
 }
 
@@ -101,7 +103,7 @@ onMounted(() => {
     if (successDevice.value) {
         showSuccess.value = true;
     } else if (!props.confirmDevice) {
-        codeInput.value?.focus();
+        (codeInput.value?.$el as HTMLInputElement | undefined)?.focus();
     }
 });
 </script>

@@ -7,23 +7,24 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { store, skip as skipCapture } from '@/routes/email-capture';
 
-const emailInput = ref<HTMLInputElement | null>(null);
+const emailInput = ref<InstanceType<typeof Input> | null>(null);
 
 const form = useForm({
     email: '',
 });
 
 function submit() {
-    form.post(route('email-capture.store'));
+    form.post(store.url());
 }
 
 function skip() {
-    form.post(route('email-capture.skip'));
+    form.post(skipCapture.url());
 }
 
 onMounted(() => {
-    emailInput.value?.focus();
+    (emailInput.value?.$el as HTMLInputElement | undefined)?.focus();
 });
 </script>
 
