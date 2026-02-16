@@ -792,3 +792,69 @@
   - Desktop shows all 5 tabs including Settings; mobile shows 4 primary tabs + "More" overflow with Settings
 
 ---
+
+## 2026-02-16 - US-021
+- What was implemented:
+  - Overview tab with full project state display: status card (PRD name, run status + progress bar, story count), quick action buttons (Start Run primary, New PRD secondary), active Claude sessions count, recent activity feed (last 10 events, clickable to navigate), git info card (branch + last commit hash + message), stats card (total/completed/remaining/failed stories + token usage), recent runs list (last 5 runs with status badges, duration, timestamps)
+  - ProjectController updated: overview method now passes full `project` data (status, PRD, stories, git info, activity, sessions) and `recentRuns` (last 5 from run_history table, scoped to device + project slug)
+  - Empty state for no_prd projects: "Get started by creating a PRD" with prominent New PRD button
+  - Quick actions disabled with tooltip when server is offline
+  - Run history sorted by most recent first, limited to 5 entries, scoped to same device_authorization_id + project_slug
+  - Recent runs show status icons (CheckCircle2, XCircle, CircleDot, Clock) with color-coded badges
+  - Duration formatting (seconds → human-readable), token count formatting (raw → K/M)
+  - Responsive layout: 3-column grid for status + actions, 2-column for activity + git, 2-column for stats + runs
+  - 13 new tests in OverviewTabTest.php covering: project data rendering, full state props, story details, empty runs, run sorting, 5-run limit, project slug scoping, run history fields, all project statuses (idle/error/paused/no_prd), cross-device isolation
+  - Updated ProjectDetailLayoutTest.php to assert new `project` and `recentRuns` props
+  - All 301 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - app/Http/Controllers/ProjectController.php (updated: overview passes full project + recentRuns)
+  - resources/js/pages/projects/Overview.vue (rewritten: full overview tab with cards, actions, activity, git, stats, runs)
+  - tests/Feature/Projects/OverviewTabTest.php (new: 13 tests)
+  - tests/Feature/Projects/ProjectDetailLayoutTest.php (updated: overview assertions include project + recentRuns)
+  - .chief/prds/main/prd.json (updated: US-021 passes: true)
+- **Learnings for future iterations:**
+  - RunHistory is scoped by both `device_authorization_id` AND `project_slug` — a project on one device shouldn't see runs from the same slug on another device
+  - CachedProjectState already has `last_commit_hash` and `last_commit_message` columns (from factory definition) — no migration needed
+  - Card components (Card, CardHeader, CardTitle, CardContent) from shadcn/vue are already available — reuse them
+  - `text-success` and `text-warning` utility classes work because `--success` and `--warning` CSS variables are defined in the theme
+  - Quick action button label changes based on project status: "Resume Run" when paused, "Start Run" otherwise
+  - Skeleton import was initially included but removed during lint — Overview data is server-rendered so no skeleton needed
+
+---
+
+## 2026-02-16 - US-022
+- What was implemented:
+  - Project Settings Tab with form fields: max_iterations (number), auto_commit (toggle), commit_prefix (text), claude_model (select), test_command (text)
+  - Settings loaded from chief server via `get_settings` WebSocket command through `useCommandRelay`
+  - Settings saved via `update_settings` WebSocket command
+  - Success feedback via toast notification ("Settings saved" with green checkmark)
+  - Error feedback via toast for WebSocket failures
+  - Dirty state tracking: Save button only enabled when form values differ from server values
+  - `beforeunload` handler warns about unsaved changes when navigating away
+  - Form disabled with explanation text when server is offline
+  - Skeleton loading state while fetching settings from server
+  - Helpful description/hint text below each form field
+  - Load error state with retry button
+  - Offline state when no cached settings available
+  - Auto-reload settings when server reconnects (if not already loaded)
+  - `useChiefMessages` composable used to listen for `settings_response`, `settings_updated`, and `error` message types
+  - ProjectController updated: settings method now passes `deviceId` prop
+  - 10 new tests in SettingsTabTest: rendering with all props, correct deviceId for various project statuses, access control (404 for non-existent/other user, auth redirect, revoked device access), multi-device deviceId correctness
+  - Updated ProjectDetailLayoutTest to verify `deviceId` prop on settings tab
+  - All 311 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - app/Http/Controllers/ProjectController.php (updated: settings passes deviceId)
+  - resources/js/pages/projects/Settings.vue (rewritten: full settings form with WebSocket integration)
+  - tests/Feature/Projects/SettingsTabTest.php (new: 10 tests)
+  - tests/Feature/Projects/ProjectDetailLayoutTest.php (updated: deviceId assertion)
+  - .chief/prds/main/prd.json (updated: US-022 passes: true)
+- **Learnings for future iterations:**
+  - Settings are loaded/saved via WebSocket relay (get_settings/update_settings commands) — not via HTTP endpoints
+  - The `useChiefMessages` composable is used to listen for chief responses to commands (settings_response, settings_updated, error)
+  - `deviceId` is obtained from `CachedProjectState.device_authorization_id` — the controller passes it as a prop to the frontend
+  - The Toggle component uses `v-model` for two-way binding (not `:modelValue` + `@update:modelValue`)
+  - Select component from reka-ui uses `v-model` for the selected value
+  - Form dirty tracking compares each form value against `serverSettings` ref — update serverSettings when server confirms changes
+  - `beforeunload` event handler requires `e.preventDefault()` (no need for `returnValue` in modern browsers)
+
+---

@@ -90,6 +90,7 @@ class ProjectController extends Controller
         return Inertia::render('projects/Settings', [
             'projectSlug' => $project->project_slug,
             'projectName' => $project->project_name,
+            'deviceId' => $project->device_authorization_id,
         ]);
     }
 

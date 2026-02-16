@@ -70,6 +70,7 @@ describe('Project Detail Routes', function () {
             ->component('projects/Settings')
             ->where('projectSlug', 'test-project')
             ->where('projectName', 'Test Project')
+            ->has('deviceId')
         );
     });
 });

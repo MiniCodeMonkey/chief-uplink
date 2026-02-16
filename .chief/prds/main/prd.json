@@ -425,7 +425,8 @@
         "Form fields have helpful descriptions/hints below each input explaining what the setting does"
       ],
       "priority": 22,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-023",
