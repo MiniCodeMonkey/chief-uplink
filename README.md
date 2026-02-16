@@ -1,8 +1,8 @@
-# Chief Web App
+# Chief Uplink
 
 **Remote-control your Chief instances from anywhere.**
 
-Chief Web App is the companion web interface for [Chief](https://github.com/minicodemonkey/chief) — an AI-powered coding agent. It lets you monitor runs, review progress, manage PRDs, and deploy cloud servers from your browser or phone. The web app performs zero AI work; it acts as a relay, cache, and account system that communicates with Chief servers running on your machines via WebSocket.
+Chief Uplink is the companion web interface for [Chief](https://github.com/minicodemonkey/chief) — an AI-powered coding agent. It lets you monitor runs, review progress, manage PRDs, and deploy cloud servers from your browser or phone. The web app performs zero AI work; it acts as a relay, cache, and account system that communicates with Chief servers running on your machines via WebSocket.
 
 > **Most users should use the hosted version at [chiefloop.com](https://chiefloop.com).** Self-hosting is available for teams that need full control over their infrastructure.
 
@@ -53,25 +53,22 @@ Chief Web App is the companion web interface for [Chief](https://github.com/mini
 git clone https://github.com/minicodemonkey/chief-uplink.git
 cd chief-uplink
 
-# Install dependencies and set up the project
+# Install dependencies, generate .env & app key, run migrations, and build frontend assets
 composer setup
-
-# Configure your environment
-cp .env.example .env    # (done by composer setup if .env doesn't exist)
-php artisan key:generate # (done by composer setup)
 
 # Edit .env with your database credentials and GitHub OAuth keys
 # See "Environment Variables" below for details
-
-# Run migrations
-php artisan migrate
 
 # Seed the database with sample data (optional, for development)
 php artisan db:seed
 
 # Start all services (server, queue, Vite, Reverb, log tail)
-composer run dev
+composer dev
 ```
+
+`composer setup` installs PHP and Node dependencies, copies `.env.example` to `.env` (if it doesn't already exist), generates the application key, runs database migrations, and builds the frontend assets.
+
+`composer dev` starts the Laravel dev server, queue worker, log tail, Vite dev server, and Reverb WebSocket server concurrently.
 
 The app will be available at `http://localhost:8000`.
 
@@ -108,7 +105,7 @@ The app will be available at `http://localhost:8000`.
 
 ## Self-Hosting Guide
 
-For teams that want to run their own instance of the Chief Web App.
+For teams that want to run their own instance of Chief Uplink.
 
 ### Server Requirements
 
@@ -248,4 +245,4 @@ Please ensure all tests pass and code style checks are clean before submitting.
 
 ## License
 
-Chief Web App is open-source software licensed under the [MIT License](LICENSE).
+Chief Uplink is open-source software licensed under the [MIT License](LICENSE).
