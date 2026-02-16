@@ -70,5 +70,6 @@ Route::middleware(['device.auth', 'throttle:general-api'])->group(function () {
 */
 
 Route::prefix('device')->middleware(['device.api'])->group(function () {
-    // Endpoints will be added by subsequent user stories (US-003 through US-009)
+    Route::post('/connect', [\App\Http\Controllers\Api\DevicePresenceController::class, 'connect'])
+        ->name('device.connect');
 });
