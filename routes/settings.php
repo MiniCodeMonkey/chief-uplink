@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\CloudDeployController;
 use App\Http\Controllers\Settings\CloudProviderKeyController;
 use App\Http\Controllers\Settings\DeviceController;
 use App\Http\Controllers\Settings\ProfileController;
@@ -22,6 +23,17 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
     Route::get('settings/cloud-servers', [CloudProviderKeyController::class, 'index'])->name('cloud-servers.index');
     Route::post('settings/cloud-servers', [CloudProviderKeyController::class, 'store'])->name('cloud-servers.store');
     Route::delete('settings/cloud-servers/{id}', [CloudProviderKeyController::class, 'destroy'])->name('cloud-servers.destroy');
+
+    // Cloud deploy wizard
+    Route::get('settings/cloud-deploy', [CloudDeployController::class, 'create'])
+        ->middleware('throttle:cloud-deploy')
+        ->name('cloud-deploy.create');
+    Route::post('settings/cloud-deploy/regions', [CloudDeployController::class, 'regions'])->name('cloud-deploy.regions');
+    Route::post('settings/cloud-deploy/tiers', [CloudDeployController::class, 'tiers'])->name('cloud-deploy.tiers');
+    Route::post('settings/cloud-deploy', [CloudDeployController::class, 'deploy'])
+        ->middleware('throttle:cloud-deploy')
+        ->name('cloud-deploy.deploy');
+    Route::get('settings/cloud-deploy/{id}/status', [CloudDeployController::class, 'status'])->name('cloud-deploy.status');
 
     Route::get('settings/appearance', function () {
         return Inertia::render('settings/Appearance');

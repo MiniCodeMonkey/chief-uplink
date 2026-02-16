@@ -55,6 +55,11 @@ return Application::configure(basePath: dirname(__DIR__))
         RateLimiter::for('browser-commands', function (Request $request) {
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
+
+        // Cloud deploy: 5 per user per hour
+        RateLimiter::for('cloud-deploy', function (Request $request) {
+            return Limit::perHour(5)->by($request->user()?->id ?: $request->ip());
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

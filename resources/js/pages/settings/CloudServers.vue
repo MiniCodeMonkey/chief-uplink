@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-import { Cloud, Eye, EyeOff, KeyRound, Loader2, Trash2 } from 'lucide-vue-next';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { Cloud, Eye, EyeOff, KeyRound, Loader2, Rocket, Trash2 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
@@ -134,11 +134,22 @@ function cancelRemove() {
 
         <SettingsLayout>
             <div class="space-y-6">
-                <Heading
-                    variant="small"
-                    title="Cloud Servers"
-                    description="Manage your cloud provider API keys for deploying servers"
-                />
+                <div class="flex items-start justify-between gap-4">
+                    <Heading
+                        variant="small"
+                        title="Cloud Servers"
+                        description="Manage your cloud provider API keys for deploying servers"
+                    />
+                    <Button
+                        as-child
+                        size="sm"
+                    >
+                        <Link href="/settings/cloud-deploy">
+                            <Rocket class="size-4" />
+                            Deploy Server
+                        </Link>
+                    </Button>
+                </div>
 
                 <!-- Success flash message -->
                 <Transition

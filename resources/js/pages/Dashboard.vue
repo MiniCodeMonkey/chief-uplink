@@ -10,6 +10,7 @@ import {
     MoreHorizontal,
     Pause,
     Plus,
+    Rocket,
     Square,
     X,
 } from 'lucide-vue-next';
@@ -339,7 +340,16 @@ const isLoading = computed(() => page.props.devices === undefined);
                 title="No devices connected"
                 description="Connect a device by running `chief login` on your machine, or deploy a cloud server to get started."
                 class="flex-1"
-            />
+            >
+                <template #action>
+                    <Button as-child>
+                        <a href="/settings/cloud-deploy">
+                            <Rocket class="size-4" />
+                            Deploy Server
+                        </a>
+                    </Button>
+                </template>
+            </EmptyState>
 
             <!-- Empty state: server never connected, no cached state -->
             <EmptyState

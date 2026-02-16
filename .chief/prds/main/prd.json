@@ -699,7 +699,8 @@
         "Smooth creation animation"
       ],
       "priority": 36,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-037",
@@ -719,7 +720,8 @@
         "Key is never sent back to the frontend after storage — only masked representation"
       ],
       "priority": 37,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-038",
@@ -742,7 +744,8 @@
         "Wizard is keyboard-navigable (Tab through fields, Enter to proceed, Escape to cancel)"
       ],
       "priority": 38,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-039",

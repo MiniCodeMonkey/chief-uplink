@@ -13,10 +13,12 @@
 - UI components are in `resources/js/components/ui/` (shadcn/vue style with reka-ui)
 - Generated action/route types are gitignored (`resources/js/actions`, `resources/js/routes`, `resources/js/wayfinder`)
 - User model uses SoftDeletes — tests checking deletion should use `assertSoftDeleted()` not `fresh()->toBeNull()`
-- Models: User, DeviceAuthorization, OauthDeviceCode, CachedProjectState, RunHistory, LogCache, CloudDeployment
+- Models: User, DeviceAuthorization, OauthDeviceCode, CachedProjectState, RunHistory, LogCache, CloudDeployment, ProviderApiKey
 - CloudDeployment.provider_api_key uses `encrypted` cast (Laravel's built-in encryption)
 - CachedProjectState table name is `cached_project_state` (singular), RunHistory is `run_history`, LogCache is `log_cache`
-- Factory states: DeviceAuthorization (online/offline/revoked), CachedProjectState (running/idle/error/paused/noPrd), RunHistory (completed/failed/paused/stopped), CloudDeployment (provisioning/destroyed/hetzner/digitalocean)
+- Factory states: DeviceAuthorization (online/offline/revoked), CachedProjectState (running/idle/error/paused/noPrd), RunHistory (completed/failed/paused/stopped), CloudDeployment (provisioning/destroyed/hetzner/digitalocean), ProviderApiKey (hetzner/digitalocean)
+- `ProviderApiKey` stores reusable provider API keys per user — separate from `cloud_deployments.provider_api_key` (per-deployment)
+- Provider API key validation uses Http::withToken() → Hetzner `/v1/servers`, DigitalOcean `/v2/account` — mock with Http::fake() in tests
 - ESLint config ignores `resources/js/components/ui/*` — shadcn components are not linted
 - Tailwind CSS 4 uses inline `@theme` in `resources/css/app.css` — no tailwind.config.js
 - Design system colors use oklch() in CSS variables; primary = amber-gold, semantic colors = success/warning/info/destructive
@@ -105,6 +107,12 @@
 - File tree collapses single-child directory chains (e.g., `src/components` instead of `src` > `components`) for cleaner display
 - Mobile full-screen modal pattern: add `max-sm:fixed max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:top-0 max-sm:left-0 max-sm:max-w-none max-sm:rounded-none max-sm:border-0 max-sm:h-full max-sm:w-full` to DialogContent
 - `clone_progress` / `clone_complete` WebSocket message types for clone operations — subscribe via `useChiefMessages` when modal opens
+- Cloud Deploy wizard at `/settings/cloud-deploy` — `CloudDeployController` handles regions/tiers/deploy/status endpoints
+- Cloud deploy rate limit: `cloud-deploy` (5 per user per hour) defined in `bootstrap/app.php`
+- Provider API endpoints: Hetzner `/v1/locations` (regions), `/v1/server_types` (tiers), `/v1/servers` (create); DigitalOcean `/v2/regions`, `/v2/sizes`, `/v2/droplets`
+- Cloud-init script uses setup token to auto-exchange for access+refresh tokens via `/api/oauth/device/exchange`
+- Deploy status polling: GET `/settings/cloud-deploy/{id}/status` — checks provider API for provisioning→active transition
+- Wizard pages use `fetch()` for AJAX calls (regions/tiers/deploy) instead of Inertia form submissions — CSRF token from meta tag
 
 ---
 
@@ -1300,4 +1308,101 @@
   - `clone_progress` messages have `output` (string, appended to log) and `percentage` (number, drives progress bar) in payload
   - `clone_complete` messages have optional `error` (string) and `project_slug` (string) in payload for success/failure handling
   - The Dialog `@update:open` handler needs both cancel logic AND the emit — pattern: `(val) => { if (!val) handleCancel(); emit('update:open', val); }`
+---
+
+## 2026-02-16 - US-036
+- What was implemented:
+  - CreateProjectModal.vue component with full form: project name input, git init toggle, start PRD creation toggle
+  - Project name validation: filesystem-safe characters, OS reserved name check, duplicate detection against existing projects
+  - Sends `create_project` command to chief server via WebSocket relay (command already supported)
+  - Listens for `create_project_complete` WebSocket message for async completion
+  - On success: navigates to PRD chat (`/projects/{slug}/prd/new`) if "Start PRD creation" is on, otherwise to project Overview
+  - Success/error toast notifications
+  - Mobile full-screen pattern (same as CloneRepositoryModal)
+  - Wired into Dashboard.vue: "New Project" dropdown menu item and empty state button both open the modal
+  - Disabled when server is offline with tooltip
+  - Auto-focus on name input when modal opens
+- Files changed:
+  - resources/js/components/CreateProjectModal.vue (created)
+  - resources/js/pages/Dashboard.vue (modified — added modal import, state, wiring)
+- **Learnings for future iterations:**
+  - `create_project` command was already in both `CommandRelayController::VALID_COMMANDS` and `useCommandRelay` `CommandType` union — no backend changes needed
+  - Toggle component is at `@/components/ui/toggle` — uses `v-model` (not `v-model:modelValue`)
+  - Modal → full-screen mobile pattern: add `max-sm:fixed max-sm:inset-0 ...` classes to DialogContent (same pattern as CloneRepositoryModal)
+  - For duplicate name checks, pass existing project names as a prop from the parent (Dashboard has access via `projects` computed from Inertia shared props)
+
+---
+
+## 2026-02-16 - US-037
+- What was implemented:
+  - Provider API Key Management in Settings → Cloud Servers
+  - New `provider_api_keys` table with migration for storing encrypted API keys per provider per user
+  - `ProviderApiKey` model with `encrypted` cast for `api_key`, `maskKey()` static method for masking
+  - `CloudProviderKeyController` with index, store, destroy actions
+  - Per-provider API key validation: Hetzner (list servers endpoint), DigitalOcean (account info endpoint)
+  - Validation feedback: spinner while validating, success flash with account name, error messages for invalid/failed keys
+  - Input field with show/hide toggle (eye icon) for API key visibility
+  - Keys stored encrypted using Laravel's built-in `encrypted` cast
+  - Masked key display (e.g., `abc...xyz123`) — API key never sent back to frontend
+  - Remove key with confirmation dialog ("This will prevent you from managing existing cloud servers through this provider")
+  - Duplicate provider detection (unique constraint per user+provider)
+  - Settings sidebar nav updated with "Cloud Servers" item between Devices and Appearance
+  - 24 comprehensive tests covering: page display, key listing, user scoping, add valid/invalid keys (both providers), duplicate detection, cross-user uniqueness, unsupported provider rejection, min length validation, encryption verification, frontend masking, remove key, cross-user protection, success messages, network errors, mask algorithm, auth requirements
+  - All 399 tests passing, Pint clean, ESLint clean (pre-existing errors only in auto-generated files)
+- Files changed:
+  - database/migrations/2026_02_16_015044_create_provider_api_keys_table.php (new)
+  - app/Models/ProviderApiKey.php (new)
+  - app/Models/User.php (updated: added providerApiKeys relationship)
+  - database/factories/ProviderApiKeyFactory.php (new)
+  - app/Http/Controllers/Settings/CloudProviderKeyController.php (new: index, store, destroy + provider validation)
+  - resources/js/pages/settings/CloudServers.vue (new: Cloud Servers settings page with API key management UI)
+  - resources/js/layouts/settings/Layout.vue (updated: added Cloud Servers nav item)
+  - routes/settings.php (updated: added cloud-servers routes)
+  - tests/Feature/Settings/CloudProviderKeyTest.php (new: 24 tests)
+- **Learnings for future iterations:**
+  - Provider API keys are separate from `cloud_deployments.provider_api_key` — the new `provider_api_keys` table stores reusable keys per provider
+  - `ProviderApiKey::maskKey()` shows first 3 and last 6 chars for keys >8 chars, all asterisks for shorter keys
+  - Http::fake() works well for mocking provider API validation in tests
+  - `Rule::unique('provider_api_keys')->where()` allows scoping uniqueness to the current user
+  - Settings nav items use auto-generated route imports — run `npm run build` to generate them after adding routes
+  - The `encrypted` cast stores encrypted data in the DB but returns plain text when accessed via Eloquent
+
+---
+
+## 2026-02-16 - US-038
+- What was implemented:
+  - Cloud Deploy Wizard with 4-step guided flow (Provider → Region → Tier → Confirm & Deploy)
+  - CloudDeployController with endpoints: create (page), regions, tiers, deploy, status
+  - Step 1: Provider selection with inline API key setup form when no key exists (reuses same validation as US-037)
+  - Step 2: Region list fetched from provider API (Hetzner /v1/locations, DigitalOcean /v2/regions)
+  - Step 3: Server tier list from provider API with name, CPU, RAM, disk, monthly cost; sorted by price; recommended tier highlighted
+  - Step 4: Summary card with provider, region, tier, monthly cost; Deploy button
+  - On deploy: generates one-time setup token (10-min expiry), calls provider API to create VPS with cloud-init script
+  - Cloud-init script auto-exchanges setup token for access+refresh tokens, writes credentials.yaml, starts chief serve
+  - Provisioning progress view with spinner and status polling (every 5 seconds)
+  - Success view with SSH command (copyable) and "Go to Dashboard" button
+  - Error handling with retry option
+  - Smooth step transitions (slide-left/right), step progress indicator (numbered dots)
+  - Each step validates before allowing progression; Back button preserves state
+  - Keyboard navigation (Enter to proceed, Escape to cancel)
+  - "Deploy Server" button added to Dashboard (no devices empty state) and Settings → Cloud Servers page
+  - Rate limiting: 5 cloud deploys per user per hour
+  - 22 Pest tests covering all endpoints, validation, provider API mocking, error scenarios
+- Files changed:
+  - app/Http/Controllers/Settings/CloudDeployController.php (new: controller with regions/tiers/deploy/status)
+  - resources/js/pages/settings/CloudDeploy.vue (new: 4-step wizard component)
+  - resources/js/pages/settings/CloudServers.vue (updated: added Deploy Server button)
+  - resources/js/pages/Dashboard.vue (updated: added Deploy Server button in no-devices empty state)
+  - routes/settings.php (updated: added cloud-deploy routes)
+  - bootstrap/app.php (updated: added cloud-deploy rate limiter)
+  - tests/Feature/Settings/CloudDeployTest.php (new: 22 tests)
+- **Learnings for future iterations:**
+  - Wizard pages use `fetch()` for AJAX calls instead of Inertia form submissions — need CSRF token from meta tag
+  - Setup token is NOT cleared by the deploy endpoint — it's only cleared when the VPS calls `/api/oauth/device/exchange`
+  - Hetzner doesn't return account name from API — uses generic "Hetzner Cloud" as account_name
+  - DigitalOcean doesn't always return IP immediately on droplet creation — IP is assigned asynchronously
+  - Hetzner server type pricing is nested in `prices[].price_monthly.gross` — need fallback mapping for missing prices
+  - ESLint catches unused imports and stray closing tags — check before committing
+  - The `Link` component from Inertia needs explicit import when adding navigation links to existing Vue pages
+
 ---
