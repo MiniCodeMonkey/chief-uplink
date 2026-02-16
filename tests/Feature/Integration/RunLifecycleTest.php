@@ -5,7 +5,6 @@ use App\Models\CachedProjectState;
 use App\Models\DeviceAuthorization;
 use App\Models\RunHistory;
 use App\Models\User;
-use App\Services\ServerConnectionManager;
 use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
@@ -19,44 +18,6 @@ beforeEach(function () {
     ]);
 });
 
-function generateRunTestAccessToken(DeviceAuthorization $device, int $expiresIn = 3600): string
-{
-    $payload = [
-        'sub' => $device->user_id,
-        'did' => $device->id,
-        'iat' => time(),
-        'exp' => time() + $expiresIn,
-    ];
-    $payloadJson = json_encode($payload);
-    $payloadBase64 = rtrim(strtr(base64_encode($payloadJson), '+/', '-_'), '=');
-    $signature = hash_hmac('sha256', $payloadBase64, config('app.key'));
-
-    return $payloadBase64.'.'.$signature;
-}
-
-function setupRunOnlineDevice(ServerConnectionManager $manager, DeviceAuthorization $device): void
-{
-    $connectionId = $device->id * 1000;
-    $token = generateRunTestAccessToken($device);
-
-    $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-    $connection->shouldReceive('send')->andReturn(null);
-
-    Event::fake();
-
-    $manager->handleHello($connectionId, [
-        'type' => 'hello',
-        'protocol_version' => 1,
-        'chief_version' => '0.5.0',
-        'device_name' => $device->device_name,
-        'os' => 'linux',
-        'arch' => 'amd64',
-        'access_token' => $token,
-    ]);
-
-    $manager->registerConnectionObject($connectionId, $connection);
-}
-
 /*
 |--------------------------------------------------------------------------
 | Start Run
@@ -65,8 +26,7 @@ function setupRunOnlineDevice(ServerConnectionManager $manager, DeviceAuthorizat
 
 describe('Start Run', function () {
     it('sends start_run command to chief server', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupRunOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -86,6 +46,8 @@ describe('Start Run', function () {
     });
 
     it('cannot start run when server is offline', function () {
+        $this->device->update(['is_online' => false]);
+
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
                 'type' => 'start_run',
@@ -108,8 +70,7 @@ describe('Start Run', function () {
 
 describe('Pause Run', function () {
     it('sends pause_run command to chief server', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupRunOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -133,8 +94,7 @@ describe('Pause Run', function () {
 
 describe('Resume Run', function () {
     it('sends resume_run command to chief server', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupRunOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -158,8 +118,7 @@ describe('Resume Run', function () {
 
 describe('Stop Run', function () {
     it('sends stop_run command to chief server', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupRunOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [

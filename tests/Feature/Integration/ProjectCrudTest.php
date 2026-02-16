@@ -3,7 +3,6 @@
 use App\Models\CachedProjectState;
 use App\Models\DeviceAuthorization;
 use App\Models\User;
-use App\Services\ServerConnectionManager;
 use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
@@ -13,44 +12,6 @@ beforeEach(function () {
     ]);
 });
 
-function generateProjectTestAccessToken(DeviceAuthorization $device, int $expiresIn = 3600): string
-{
-    $payload = [
-        'sub' => $device->user_id,
-        'did' => $device->id,
-        'iat' => time(),
-        'exp' => time() + $expiresIn,
-    ];
-    $payloadJson = json_encode($payload);
-    $payloadBase64 = rtrim(strtr(base64_encode($payloadJson), '+/', '-_'), '=');
-    $signature = hash_hmac('sha256', $payloadBase64, config('app.key'));
-
-    return $payloadBase64.'.'.$signature;
-}
-
-function setupProjectOnlineDevice(ServerConnectionManager $manager, DeviceAuthorization $device): void
-{
-    $connectionId = $device->id * 1000;
-    $token = generateProjectTestAccessToken($device);
-
-    $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-    $connection->shouldReceive('send')->andReturn(null);
-
-    Event::fake();
-
-    $manager->handleHello($connectionId, [
-        'type' => 'hello',
-        'protocol_version' => 1,
-        'chief_version' => '0.5.0',
-        'device_name' => $device->device_name,
-        'os' => 'linux',
-        'arch' => 'amd64',
-        'access_token' => $token,
-    ]);
-
-    $manager->registerConnectionObject($connectionId, $connection);
-}
-
 /*
 |--------------------------------------------------------------------------
 | Clone Repository via WebSocket Relay
@@ -59,8 +20,7 @@ function setupProjectOnlineDevice(ServerConnectionManager $manager, DeviceAuthor
 
 describe('Clone Repository', function () {
     it('sends clone_repo command to chief server', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupProjectOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -80,6 +40,8 @@ describe('Clone Repository', function () {
     });
 
     it('cannot clone when server is offline', function () {
+        $this->device->update(['is_online' => false]);
+
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
                 'type' => 'clone_repo',
@@ -96,8 +58,7 @@ describe('Clone Repository', function () {
     });
 
     it('rate limits clone_repo to 10 per hour', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupProjectOnlineDevice($manager, $this->device);
+        Event::fake();
 
         for ($i = 0; $i < 10; $i++) {
             $this->actingAs($this->user)
@@ -136,8 +97,7 @@ describe('Clone Repository', function () {
 
 describe('Create Project', function () {
     it('sends create_project command to chief server', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupProjectOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -156,6 +116,8 @@ describe('Create Project', function () {
     });
 
     it('cannot create project when server is offline', function () {
+        $this->device->update(['is_online' => false]);
+
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
                 'type' => 'create_project',
@@ -169,8 +131,7 @@ describe('Create Project', function () {
     });
 
     it('shares the clone_repo rate limit for create_project', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupProjectOnlineDevice($manager, $this->device);
+        Event::fake();
 
         // Use up 9 of the 10 allowed with clone_repo
         for ($i = 0; $i < 9; $i++) {
@@ -208,8 +169,7 @@ describe('Create Project', function () {
 
 describe('Get Diffs', function () {
     it('sends get_diffs command to chief server', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupProjectOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -236,8 +196,7 @@ describe('Get Diffs', function () {
 
 describe('Project Settings via WebSocket', function () {
     it('sends get_settings command to chief server', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupProjectOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -250,8 +209,7 @@ describe('Project Settings via WebSocket', function () {
     });
 
     it('sends update_settings command to chief server', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupProjectOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
