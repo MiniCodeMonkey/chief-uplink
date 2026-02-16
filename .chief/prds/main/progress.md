@@ -1916,3 +1916,38 @@
   - The `@custom-variant dark (&:is(.dark *))` in Tailwind CSS 4 means `.dark` class toggles on `<html>` element
   - diff2html has built-in `d2h-dark-color-scheme` / `d2h-light-color-scheme` classes — DiffFileViewer uses MutationObserver to detect dark mode changes
 ---
+
+## US-053: Unit Tests ✅
+- **Status:** Passed
+- **What was implemented:**
+  - Pest PHP unit tests for all 9 Eloquent models (User, DeviceAuthorization, OauthDeviceCode, CloudDeployment, ProviderApiKey, CachedProjectState, RunHistory, LogCache, PushSubscription) — relationships, casts, factory states, accessors
+  - Unit tests for OAuth token validation (HMAC-SHA256 access tokens, bcrypt refresh tokens, token reuse detection)
+  - Unit tests for rate limiting (all 10 configured limiters verified)
+  - Unit tests for API key encryption (Hetzner/DigitalOcean validation with mocked HTTP, encrypted storage, one-key-per-provider, masked keys)
+  - Unit tests for email notification batching (queue skipping, digest dispatch, flush/clear, preference defaults)
+  - Unit tests for connection status state machine (ServerConnectionManager hello/disconnect flow, authentication, device tracking, broadcast events)
+  - Unit tests for WebSocket message buffer (bufferable types, replay order, timestamps, session/device flush, stale cleanup)
+  - Vitest + Vue Test Utils configured for Vue component testing (vitest.config.ts, happy-dom environment)
+  - Vue component tests for 11 design system components (StatusDot, ProgressBar, EmptyState, Toggle, Skeleton, Spinner, Toast, CopyButton, Button, Badge, Input)
+  - Vue composable test (useToast)
+  - Vue complex component tests (CommandPalette with Teleport handling, BreadcrumbPicker with Inertia mocking)
+  - 652 PHP tests (3274 assertions) all passing
+  - 122 Vue/Vitest tests all passing
+- **Key files created:**
+  - tests/Unit/Models/ (9 model test files)
+  - tests/Unit/Services/ (6 service test files)
+  - resources/js/components/ui/__tests__/ (11 component test files)
+  - resources/js/composables/__tests__/useToast.test.ts
+  - resources/js/components/__tests__/CommandPalette.test.ts, BreadcrumbPicker.test.ts
+  - vitest.config.ts
+- **Key files modified:**
+  - tests/Pest.php (added 'Unit' to RefreshDatabase scope)
+  - package.json (added vitest, @vue/test-utils, happy-dom, @vitejs/plugin-vue devDependencies; added test scripts)
+- **Learnings for future iterations:**
+  - Laravel 12 returns `Carbon\CarbonImmutable` for datetime casts, not `Illuminate\Support\Carbon` — use `\DateTimeInterface::class` for assertions
+  - Redis keys in tests have `laravel_database_` prefix — use specific key deletion or model methods for cleanup, not `keys()` pattern matching
+  - Vue components using `<Teleport to="body">` won't render content in `wrapper.html()` — use `document.body.innerHTML` or `document.querySelector()` instead
+  - `navigator.clipboard` is read-only in happy-dom — use `Object.defineProperty` with `configurable: true` instead of `Object.assign`
+  - `vi.advanceTimersByTime()` requires `vi.useFakeTimers()` to be called first in the test file
+  - Inertia.js components need full mock of `@inertiajs/vue3` module (`router`, `usePage`) for test isolation
+---
