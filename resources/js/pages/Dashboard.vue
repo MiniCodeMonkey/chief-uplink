@@ -6,10 +6,12 @@ import {
     GitBranch,
     GitFork,
     MessageSquare,
+    Monitor,
     MoreHorizontal,
     Pause,
     Plus,
     Square,
+    X,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StatusDot } from '@/components/ui/status-dot';
 import { useCommandRelay } from '@/composables/useCommandRelay';
 import { formatRelativeTime, useConnectionStatus } from '@/composables/useConnectionStatus';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -28,11 +31,12 @@ interface DeviceWithProjects extends DeviceSummary {
 
 const page = usePage();
 const { sendCommand } = useCommandRelay();
-const { isOnline } = useConnectionStatus();
+const { isOnline, isOffline, isNeverConnected, selectedDevice, statusText } = useConnectionStatus();
 
 const newMenuOpen = ref(false);
 const longPressTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const longPressProjectSlug = ref<string | null>(null);
+const offlineBannerDismissed = ref(false);
 
 const devices = computed(
     () => (page.props.devices as DeviceWithProjects[]) || [],
@@ -54,6 +58,31 @@ const currentDevice = computed(() => {
 const projects = computed(() => currentDevice.value?.projects ?? []);
 
 const hasDevices = computed(() => devices.value.length > 0);
+
+// Server is not live (offline, reconnecting, or never connected)
+const serverNotLive = computed(() => !isOnline.value);
+
+// Show offline banner when server is offline and banner hasn't been dismissed
+const showOfflineBanner = computed(
+    () => hasDevices.value && isOffline.value && !offlineBannerDismissed.value,
+);
+
+// Offline banner text with last synced time
+const offlineBannerText = computed(() => {
+    if (!selectedDevice.value?.last_connected_at) {
+        return 'Server offline — showing last known state';
+    }
+    return `Server offline — showing last known state from ${formatRelativeTime(selectedDevice.value.last_connected_at)}`;
+});
+
+// Show never-connected empty state when device exists but never connected and has no projects
+const showNeverConnectedEmpty = computed(
+    () => hasDevices.value && isNeverConnected.value && projects.value.length === 0,
+);
+
+function dismissOfflineBanner() {
+    offlineBannerDismissed.value = true;
+}
 
 function statusLabel(status: string): string {
     switch (status) {
@@ -111,7 +140,9 @@ async function stopRun(e: Event, deviceId: number) {
     await sendCommand(deviceId, 'stop_run');
 }
 
-function handleLongPressStart(slug: string) {
+function handleLongPressStart(slug: string, status: string) {
+    // Only allow long-press for running projects when server is online
+    if (!isOnline.value || status !== 'running') return;
     longPressTimer.value = setTimeout(() => {
         longPressProjectSlug.value = slug;
     }, 500);
@@ -151,9 +182,37 @@ const isLoading = computed(() => page.props.devices === undefined);
 
     <AppLayout>
         <div class="flex h-full flex-1 flex-col gap-4 p-4">
+            <!-- Offline banner -->
+            <Transition
+                enter-active-class="transition duration-[var(--duration-standard)] ease-[var(--ease-gentle)]"
+                enter-from-class="opacity-0 -translate-y-2"
+                enter-to-class="opacity-100 translate-y-0"
+                leave-active-class="transition duration-[var(--duration-standard)] ease-[var(--ease-gentle)]"
+                leave-from-class="opacity-100 translate-y-0"
+                leave-to-class="opacity-0 -translate-y-2"
+            >
+                <div
+                    v-if="showOfflineBanner"
+                    class="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground"
+                    role="status"
+                    aria-live="polite"
+                >
+                    <StatusDot state="offline" class="size-2 shrink-0" />
+                    <span class="flex-1">{{ offlineBannerText }}</span>
+                    <button
+                        class="focus-ring -mr-1 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:text-foreground"
+                        title="Dismiss"
+                        aria-label="Dismiss offline banner"
+                        @click="dismissOfflineBanner"
+                    >
+                        <X class="size-3.5" />
+                    </button>
+                </div>
+            </Transition>
+
             <!-- Top actions bar -->
             <div
-                v-if="hasDevices"
+                v-if="hasDevices && !showNeverConnectedEmpty"
                 class="flex items-center justify-between"
             >
                 <h1 class="text-lg font-semibold">Projects</h1>
@@ -161,6 +220,8 @@ const isLoading = computed(() => page.props.devices === undefined);
                 <div class="relative">
                     <Button
                         size="sm"
+                        :disabled="serverNotLive"
+                        :title="serverNotLive ? 'Server offline' : undefined"
                         @click="newMenuOpen = !newMenuOpen"
                     >
                         <Plus class="size-4" />
@@ -249,6 +310,22 @@ const isLoading = computed(() => page.props.devices === undefined);
                 class="flex-1"
             />
 
+            <!-- Empty state: server never connected, no cached state -->
+            <EmptyState
+                v-else-if="showNeverConnectedEmpty"
+                :icon="Monitor"
+                title="Server has never connected"
+                description="Run `chief serve` on your device to connect it. Once connected, your projects will appear here."
+                class="flex-1"
+            >
+                <template #action>
+                    <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                        <StatusDot state="never-connected" class="size-2" />
+                        <span>{{ statusText }}</span>
+                    </div>
+                </template>
+            </EmptyState>
+
             <!-- Empty state: device has no projects -->
             <EmptyState
                 v-else-if="projects.length === 0"
@@ -277,19 +354,20 @@ const isLoading = computed(() => page.props.devices === undefined);
                     v-for="(project, index) in projects"
                     :key="project.id"
                     class="project-card group relative cursor-pointer rounded-lg border border-border bg-card p-5 transition-all duration-[var(--duration-standard)] ease-[var(--ease-snappy)] hover:border-foreground/20 hover:-translate-y-px active:scale-[0.98]"
+                    :class="{ 'opacity-70': serverNotLive }"
                     :style="{ animationDelay: `${index * 50}ms` }"
                     role="link"
                     :tabindex="0"
                     :aria-label="`${project.project_name} — ${statusLabel(project.status)}`"
                     @click="navigateToProject(project.project_slug)"
                     @keydown.enter="navigateToProject(project.project_slug)"
-                    @touchstart="handleLongPressStart(project.project_slug)"
+                    @touchstart="handleLongPressStart(project.project_slug, project.status)"
                     @touchend="handleLongPressEnd"
                     @touchcancel="handleLongPressEnd"
                 >
-                    <!-- Desktop hover action buttons -->
+                    <!-- Desktop hover action buttons (hidden when offline) -->
                     <div
-                        v-if="project.status === 'running' && currentDevice"
+                        v-if="project.status === 'running' && currentDevice && isOnline"
                         class="absolute right-3 top-3 z-10 flex gap-1 opacity-0 transition-opacity duration-[var(--duration-standard)] group-hover:opacity-100"
                     >
                         <button
@@ -308,9 +386,9 @@ const isLoading = computed(() => page.props.devices === undefined);
                         </button>
                     </div>
 
-                    <!-- Mobile long-press hint (... icon) -->
+                    <!-- Mobile long-press hint (... icon) — hidden when offline -->
                     <div
-                        v-if="project.status === 'running'"
+                        v-if="project.status === 'running' && isOnline"
                         class="absolute right-3 top-3 z-10 flex lg:hidden group-hover:hidden"
                     >
                         <MoreHorizontal class="size-4 text-muted-foreground/40" />
