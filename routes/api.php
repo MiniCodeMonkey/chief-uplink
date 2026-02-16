@@ -71,13 +71,18 @@ Route::middleware(['device.auth', 'throttle:general-api'])->group(function () {
 
 Route::prefix('device')->middleware(['device.api'])->group(function () {
     Route::post('/connect', [\App\Http\Controllers\Api\DevicePresenceController::class, 'connect'])
+        ->middleware('throttle:device-connect')
         ->name('device.connect');
     Route::post('/disconnect', [\App\Http\Controllers\Api\DevicePresenceController::class, 'disconnect'])
+        ->middleware('throttle:device-disconnect')
         ->name('device.disconnect');
     Route::post('/messages', [\App\Http\Controllers\Api\MessageIngestionController::class, 'ingest'])
+        ->middleware('throttle:device-messages')
         ->name('device.messages');
     Route::post('/broadcasting/auth', [\App\Http\Controllers\Api\DeviceBroadcastAuthController::class, 'authenticate'])
+        ->middleware('throttle:device-broadcasting-auth')
         ->name('device.broadcasting.auth');
     Route::post('/heartbeat', [\App\Http\Controllers\Api\DeviceHeartbeatController::class, 'beat'])
+        ->middleware('throttle:device-heartbeat')
         ->name('device.heartbeat');
 });

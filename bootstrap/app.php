@@ -40,6 +40,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'device.auth' => ValidateDeviceAccessToken::class,
             'device.api' => AuthenticateDevice::class,
         ]);
+
+        // Ensure device auth runs before throttle so rate limiters can key by device_id
+        $middleware->prependToPriorityList(
+            \Illuminate\Routing\Middleware\ThrottleRequests::class,
+            AuthenticateDevice::class,
+        );
     })
     ->booted(function () {
         // Device code requests: 10 per IP per 15 minutes
@@ -90,6 +96,31 @@ return Application::configure(basePath: dirname(__DIR__))
         // Push notifications: 20 per user per hour (enforced in SendPushNotification job)
         RateLimiter::for('push-notifications', function (Request $request) {
             return Limit::perHour(20)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // Device API: connect — 10 per device per minute
+        RateLimiter::for('device-connect', function (Request $request) {
+            return Limit::perMinute(10)->by('device:'.$request->attributes->get('device_id', $request->ip()));
+        });
+
+        // Device API: disconnect — 10 per device per minute
+        RateLimiter::for('device-disconnect', function (Request $request) {
+            return Limit::perMinute(10)->by('device:'.$request->attributes->get('device_id', $request->ip()));
+        });
+
+        // Device API: messages — 60 per device per minute
+        RateLimiter::for('device-messages', function (Request $request) {
+            return Limit::perMinute(60)->by('device:'.$request->attributes->get('device_id', $request->ip()));
+        });
+
+        // Device API: heartbeat — 5 per device per minute
+        RateLimiter::for('device-heartbeat', function (Request $request) {
+            return Limit::perMinute(5)->by('device:'.$request->attributes->get('device_id', $request->ip()));
+        });
+
+        // Device API: broadcasting auth — 10 per device per minute
+        RateLimiter::for('device-broadcasting-auth', function (Request $request) {
+            return Limit::perMinute(10)->by('device:'.$request->attributes->get('device_id', $request->ip()));
         });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
