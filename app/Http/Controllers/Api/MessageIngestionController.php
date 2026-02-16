@@ -159,7 +159,7 @@ class MessageIngestionController extends Controller
     /**
      * Handle a project_state message — update cached project state.
      *
-     * Replicates ChiefServerController::handleProjectState() logic.
+     * Updates CachedProjectState records for the device.
      */
     protected function handleProjectState(int $deviceId, array $message): void
     {
