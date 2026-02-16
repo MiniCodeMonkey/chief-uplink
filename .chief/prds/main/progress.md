@@ -125,6 +125,12 @@
 - Settings → Preferences page at `/settings/preferences` for push notification opt-in toggle
 - Event listeners registered in `AppServiceProvider::boot()` via `Event::listen()`
 - CSRF token meta tag added to `app.blade.php` for fetch-based API calls
+- Email notifications use batching via Redis — `EmailNotificationService` accumulates events in `email:batch:{user_id}` for 5-minute window, then sends a single digest email
+- `NotificationDigest` Mailable does NOT implement `ShouldQueue` — the job (`SendEmailNotificationDigest`) is already queued, so double-queueing is unnecessary
+- Email unsubscribe uses signed URL (`URL::signedRoute()`) — no auth required, one-click disable
+- `NotificationPreferenceController` updates `notification_preferences` JSON column — use PATCH with JSON body
+- Redis timer key `email:batch:timer:{user_id}` prevents multiple digest jobs per batch window — cleared when batch is flushed
+- In tests, Redis keys persist across test cases (not reset by RefreshDatabase) — explicitly delete with `$redis->del()` in `beforeEach`
 
 ---
 
@@ -1511,5 +1517,68 @@
   - CSRF token is available via meta tag in blade template — used by composables that make fetch calls
   - Device offline push uses delayed job dispatch (2 min) — check `is_online` before sending to avoid false positives
   - Push notification rate limiting uses `RateLimiter::tooManyAttempts()` in the job, not middleware
+
+---
+
+## 2026-02-16 - US-041
+- What was implemented:
+  - Email notification system with 5-minute batching (events accumulated in Redis, sent as a single digest email)
+  - `NotificationDigest` Mailable with both HTML and plain text templates — developer-appropriate tone, no marketing fluff
+  - `EmailNotificationService` handles Redis-based batching with `email:batch:{user_id}` keys and timer-based deduplication
+  - `SendEmailNotificationDigest` queued job sends digest emails with rate limiting (10 per user per day)
+  - `SendEmailForChiefMessage` listener for `ChiefMessageReceived` event — triggers on run_complete, run_paused, quota_exhausted
+  - `ScheduleOfflineEmailNotification` listener for `DeviceDisconnected` event — 2-minute delay before sending
+  - `SendDeviceOfflineEmail` delayed job — checks if device is still offline before queuing email
+  - `EmailUnsubscribeController` with signed URL — one-click unsubscribe from email notifications
+  - `NotificationPreferenceController` — PATCH endpoint for toggling email notification preference
+  - Updated `Preferences.vue` with email notification toggle (disabled when user has no email on file)
+  - Registered event listeners in `AppServiceProvider::registerEmailNotificationListeners()`
+  - 23 comprehensive tests covering: event triggers, preference checks, batching, digest sending, unsubscribe, preference API
+- Files changed:
+  - app/Mail/NotificationDigest.php (new)
+  - app/Services/EmailNotificationService.php (new)
+  - app/Jobs/SendEmailNotificationDigest.php (new)
+  - app/Jobs/SendDeviceOfflineEmail.php (new)
+  - app/Listeners/SendEmailForChiefMessage.php (new)
+  - app/Listeners/ScheduleOfflineEmailNotification.php (new)
+  - app/Http/Controllers/Settings/EmailUnsubscribeController.php (new)
+  - app/Http/Controllers/Settings/NotificationPreferenceController.php (new)
+  - resources/views/emails/notification-digest.blade.php (new)
+  - resources/views/emails/notification-digest-text.blade.php (new)
+  - resources/js/pages/settings/Preferences.vue (updated)
+  - app/Providers/AppServiceProvider.php (updated)
+  - routes/web.php (updated)
+  - routes/settings.php (updated)
+  - tests/Feature/Notifications/EmailNotificationTest.php (new)
+  - .chief/prds/main/prd.json (updated)
+- **Learnings for future iterations:**
+  - `NotificationDigest` Mailable should NOT implement `ShouldQueue` when already dispatched from a queued job — causes `Mail::assertSent()` vs `Mail::assertQueued()` confusion in tests
+  - Redis keys persist across test cases (not reset by `RefreshDatabase`) — need explicit cleanup in `beforeEach` for Redis-dependent tests
+  - `Redis::connection()->keys('pattern*')` may have prefix issues — safer to delete known specific keys than use pattern matching
+  - SQLite in-memory tests reset auto-increment per test, so user IDs collide with Redis keys from previous tests
+  - `URL::signedRoute()` generates time-limited signed URLs — great for unsubscribe links
+  - Email notification preference stored in `notification_preferences` JSON column alongside push preference — both independently toggleable
+
+---
+
+## 2026-02-16 - US-042
+- What was implemented:
+  - US-042 was already fully implemented by previous iterations (US-040 and US-041)
+  - Settings → Preferences page at `/settings/preferences` with push and email notification toggles
+  - Push toggle uses `usePushNotifications` composable — triggers browser permission prompt when enabling
+  - Email toggle saves instantly via PATCH to `/settings/notification-preferences` endpoint
+  - Both toggles independently enabled/disabled with instant feedback (no save button)
+  - Browser permission denied state handled with explanatory text for re-enabling
+  - Unsupported browser state handled gracefully
+  - Preferences stored in `users.notification_preferences` JSON column (cast as array)
+  - 50 notification/preference tests passing covering: push subscriptions, email preferences, notification preference API, preferences page accessibility
+  - All 484 tests passing, Pint clean
+- Files changed:
+  - .chief/prds/main/prd.json (updated: US-042 passes: true)
+  - No code changes needed — feature was already complete
+- **Learnings for future iterations:**
+  - Some stories may already be fully implemented by prerequisite stories — always check existing code before implementing
+  - US-040 (Push Notifications) and US-041 (Email Notifications) already implemented the full preferences page and toggles as part of their notification system setup
+  - The notification preferences page serves as the central hub for both push and email notification control
 
 ---

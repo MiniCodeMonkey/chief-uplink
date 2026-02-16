@@ -817,7 +817,7 @@
         "Stored in users.notification_preferences JSON column"
       ],
       "priority": 42,
-      "passes": false
+      "passes": true
     },
     {
       "id": "US-043",
