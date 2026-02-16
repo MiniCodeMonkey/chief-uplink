@@ -154,6 +154,7 @@ class DeviceOAuthController extends Controller
             'token_type' => 'Bearer',
             'expires_in' => 3600,
             'refresh_token' => $newRefreshToken,
+            'ws_url' => $this->buildWsUrl(),
         ]);
     }
 
@@ -248,7 +249,36 @@ class DeviceOAuthController extends Controller
             'expires_in' => 3600,
             'refresh_token' => $refreshToken,
             'device_id' => $device->id,
+            'ws_url' => $this->buildWsUrl(),
         ]);
+    }
+
+    /**
+     * Build the WebSocket URL from Reverb configuration.
+     *
+     * Returns the full WS URL (e.g. wss://host/ws/server) or null
+     * if REVERB_HOST is not configured (local dev without Reverb).
+     */
+    private function buildWsUrl(): ?string
+    {
+        $options = config('reverb.apps.apps.0.options', []);
+        $host = $options['host'] ?? null;
+
+        if (! $host) {
+            return null;
+        }
+
+        $scheme = ($options['scheme'] ?? 'https') === 'https' ? 'wss' : 'ws';
+        $port = (int) ($options['port'] ?? ($scheme === 'wss' ? 443 : 80));
+        $defaultPort = $scheme === 'wss' ? 443 : 80;
+
+        $url = "{$scheme}://{$host}";
+
+        if ($port !== $defaultPort) {
+            $url .= ":{$port}";
+        }
+
+        return "{$url}/ws/server";
     }
 
     /**

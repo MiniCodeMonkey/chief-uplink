@@ -463,6 +463,138 @@ test('token can be rotated multiple times in sequence', function () {
     }
 });
 
+/*
+|--------------------------------------------------------------------------
+| WebSocket URL in Token Responses
+|--------------------------------------------------------------------------
+*/
+
+test('token response includes ws_url from reverb config', function () {
+    config()->set('reverb.apps.apps.0.options.host', 'ws-abc123-reverb.laravel.cloud');
+    config()->set('reverb.apps.apps.0.options.port', 443);
+    config()->set('reverb.apps.apps.0.options.scheme', 'https');
+
+    $refreshToken = Str::random(64);
+    $user = User::factory()->create();
+    DeviceAuthorization::factory()->create([
+        'user_id' => $user->id,
+        'refresh_token_hash' => Hash::make($refreshToken),
+    ]);
+
+    $response = $this->postJson('/api/oauth/token', [
+        'grant_type' => 'refresh_token',
+        'refresh_token' => $refreshToken,
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('ws_url', 'wss://ws-abc123-reverb.laravel.cloud/ws/server');
+});
+
+test('token response includes ws_url on device approval', function () {
+    config()->set('reverb.apps.apps.0.options.host', 'ws-abc123-reverb.laravel.cloud');
+    config()->set('reverb.apps.apps.0.options.port', 443);
+    config()->set('reverb.apps.apps.0.options.scheme', 'https');
+
+    $user = User::factory()->create();
+    $deviceCode = \App\Models\OauthDeviceCode::create([
+        'device_code' => 'test-device-code',
+        'user_code' => 'ABCD-1234',
+        'device_name' => 'test-device',
+        'user_id' => $user->id,
+        'status' => 'approved',
+        'expires_at' => now()->addMinutes(15),
+    ]);
+
+    $response = $this->postJson('/api/oauth/device/token', [
+        'device_code' => 'test-device-code',
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('ws_url', 'wss://ws-abc123-reverb.laravel.cloud/ws/server');
+});
+
+test('ws_url omits default port for wss', function () {
+    config()->set('reverb.apps.apps.0.options.host', 'ws-host.example.com');
+    config()->set('reverb.apps.apps.0.options.port', 443);
+    config()->set('reverb.apps.apps.0.options.scheme', 'https');
+
+    $refreshToken = Str::random(64);
+    $user = User::factory()->create();
+    DeviceAuthorization::factory()->create([
+        'user_id' => $user->id,
+        'refresh_token_hash' => Hash::make($refreshToken),
+    ]);
+
+    $response = $this->postJson('/api/oauth/token', [
+        'grant_type' => 'refresh_token',
+        'refresh_token' => $refreshToken,
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('ws_url', 'wss://ws-host.example.com/ws/server');
+});
+
+test('ws_url includes non-default port', function () {
+    config()->set('reverb.apps.apps.0.options.host', 'ws-host.example.com');
+    config()->set('reverb.apps.apps.0.options.port', 8080);
+    config()->set('reverb.apps.apps.0.options.scheme', 'https');
+
+    $refreshToken = Str::random(64);
+    $user = User::factory()->create();
+    DeviceAuthorization::factory()->create([
+        'user_id' => $user->id,
+        'refresh_token_hash' => Hash::make($refreshToken),
+    ]);
+
+    $response = $this->postJson('/api/oauth/token', [
+        'grant_type' => 'refresh_token',
+        'refresh_token' => $refreshToken,
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('ws_url', 'wss://ws-host.example.com:8080/ws/server');
+});
+
+test('ws_url uses ws scheme for http', function () {
+    config()->set('reverb.apps.apps.0.options.host', 'localhost');
+    config()->set('reverb.apps.apps.0.options.port', 80);
+    config()->set('reverb.apps.apps.0.options.scheme', 'http');
+
+    $refreshToken = Str::random(64);
+    $user = User::factory()->create();
+    DeviceAuthorization::factory()->create([
+        'user_id' => $user->id,
+        'refresh_token_hash' => Hash::make($refreshToken),
+    ]);
+
+    $response = $this->postJson('/api/oauth/token', [
+        'grant_type' => 'refresh_token',
+        'refresh_token' => $refreshToken,
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('ws_url', 'ws://localhost/ws/server');
+});
+
+test('ws_url is null when reverb host not configured', function () {
+    config()->set('reverb.apps.apps.0.options.host', null);
+
+    $refreshToken = Str::random(64);
+    $user = User::factory()->create();
+    DeviceAuthorization::factory()->create([
+        'user_id' => $user->id,
+        'refresh_token_hash' => Hash::make($refreshToken),
+    ]);
+
+    $response = $this->postJson('/api/oauth/token', [
+        'grant_type' => 'refresh_token',
+        'refresh_token' => $refreshToken,
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('ws_url', null);
+});
+
 test('only the most recent previous token triggers compromise detection', function () {
     $refreshToken = Str::random(64);
     $user = User::factory()->create();
