@@ -384,6 +384,7 @@ function getConnectionStatusLabel(status: string): string {
                             ref="inputRef"
                             v-model="query"
                             type="text"
+                            aria-label="Search command palette"
                             placeholder="Search projects, servers, actions..."
                             class="h-12 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
                             autocomplete="off"

@@ -46,6 +46,8 @@ const paddingLeft = `${props.depth * 12 + 8}px`;
         <button
             class="flex w-full items-center gap-1.5 px-2 py-1 text-left text-sm text-muted-foreground transition-colors duration-[var(--duration-micro)] hover:bg-accent/50"
             :style="{ paddingLeft }"
+            :aria-expanded="expanded"
+            :aria-label="`Toggle ${node.name} directory`"
             @click="toggleExpand"
         >
             <ChevronRight

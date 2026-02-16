@@ -925,6 +925,9 @@ const saveButtonLabel = computed(() => {
                 <!-- Chat messages area -->
                 <div
                     ref="messagesContainer"
+                    role="log"
+                    aria-live="polite"
+                    aria-label="Chat messages"
                     class="flex-1 overflow-y-auto"
                     @scroll="handleScroll"
                 >
@@ -1030,6 +1033,7 @@ const saveButtonLabel = computed(() => {
                                 ref="textareaRef"
                                 v-model="userInput"
                                 :disabled="isSaving || serverNotLive || sessionExpired"
+                                aria-label="Chat message input"
                                 class="focus-ring w-full resize-none rounded-xl border border-border bg-surface px-4 py-3 pr-12 text-sm text-foreground placeholder-muted-foreground transition-colors duration-[var(--duration-micro)] focus:border-primary disabled:cursor-not-allowed disabled:opacity-50 lg:pr-4"
                                 :class="{ 'opacity-50': isClaudeResponding }"
                                 :placeholder="sessionExpired ? 'Session expired — click Resume to continue' : (isRefineMode ? 'Describe the changes you want to make...' : 'Describe what you want to build...')"

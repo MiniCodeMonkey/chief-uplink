@@ -2050,3 +2050,43 @@
   - resources/js/components/AppSidebarHeader.vue — Added missing duration-200
 - **Test results:** 744 tests, 3871 assertions, all passing; Pint passes
 ---
+
+### US-058 — Accessibility ✅
+- **What was done:**
+  - Comprehensive ARIA accessibility audit of entire frontend codebase
+  - Added skip-to-main-content link in both AppLayout.vue and ProjectLayout.vue (sr-only, visible on focus)
+  - Added `id="main-content"` to main content elements (AppContent.vue, SidebarInset.vue, docs Show.vue)
+  - Added `aria-live="polite"` with `role="log"` to PrdChat messages container for streaming output
+  - Added `role="status"` with dynamic `aria-label` to Run.vue progress section
+  - Added `aria-label="Chat message input"` to PrdChat textarea
+  - Added `aria-label="Search command palette"` to CommandPalette search input
+  - Fixed Dashboard heading hierarchy: h3 → h2 for project names (was skipping from h1 to h3)
+  - Added `aria-expanded` and `aria-label` to DiffFileTreeNode directory toggle button
+  - Added `aria-expanded` and `aria-label` to Run.vue history expand/collapse button
+- **Audit findings (already compliant):**
+  - StatusDot: Already has `role="status"`, `aria-label`, and `<span class="sr-only">` text for all states
+  - Toast notifications: Already uses `role="alert"` with `aria-live` (assertive for errors, polite for info)
+  - ConnectionStatusIndicator: Already has `role="status"` with `aria-label`
+  - DeviceStatusBanner: Already has `role="status"` with `aria-label`
+  - All form fields in settings pages: Already have associated `<Label>` components
+  - CommandPalette: Already has `role="dialog"`, `role="listbox"`, `role="option"`, `aria-selected`
+  - Dialog/Modal components: reka-ui provides proper `role="dialog"` and `aria-modal="true"`
+  - Toggle component: Already has `role="switch"` with `aria-checked`
+  - ProgressBar: Already has `role="progressbar"` with `aria-valuenow/min/max`
+  - ProjectTabBar: Already has `aria-current="page"` on active tab
+  - Color never sole indicator: Status dots use icons/text alongside color throughout
+  - `<main>` landmark: Already present in AppContent and SidebarInset components
+  - InputError: Already uses `role="alert"` for form validation errors
+- **Files modified:**
+  - resources/js/layouts/AppLayout.vue — Added skip-to-main-content link
+  - resources/js/layouts/ProjectLayout.vue — Added skip-to-main-content link
+  - resources/js/components/AppContent.vue — Added id="main-content" to main element
+  - resources/js/components/ui/sidebar/SidebarInset.vue — Added id="main-content" to main element
+  - resources/js/pages/docs/Show.vue — Added id="main-content" to main element
+  - resources/js/pages/projects/PrdChat.vue — Added aria-live, role="log" to chat area, aria-label to textarea
+  - resources/js/pages/projects/Run.vue — Added role="status" to progress section, aria-expanded to history button
+  - resources/js/pages/Dashboard.vue — Fixed h3 → h2 for project card headings
+  - resources/js/components/CommandPalette.vue — Added aria-label to search input
+  - resources/js/components/DiffFileTreeNode.vue — Added aria-expanded and aria-label to directory toggle
+- **Test results:** 744 tests, 3866 assertions, all passing; Pint passes
+---

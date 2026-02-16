@@ -1165,7 +1165,8 @@
         "Tested with VoiceOver (macOS) and NVDA (Windows) for basic user journeys (login → dashboard → project → run tab)"
       ],
       "priority": 58,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     }
   ]
 }

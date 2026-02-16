@@ -314,7 +314,7 @@ onBeforeUnmount(() => {
             </aside>
 
             <!-- Main content -->
-            <main class="min-w-0 flex-1 px-4 py-8 lg:px-12">
+            <main id="main-content" class="min-w-0 flex-1 px-4 py-8 lg:px-12">
                 <article class="docs-content mx-auto max-w-3xl" v-html="renderedHtml" />
 
                 <!-- Previous / Next navigation -->

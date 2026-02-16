@@ -576,6 +576,8 @@ function scrollToOutput() {
                 <!-- Progress bar spanning full width at top -->
                 <div
                     v-if="project.stories_total > 0"
+                    role="status"
+                    :aria-label="`Progress: ${project.stories_completed} of ${project.stories_total} stories completed`"
                     class="border-b border-border px-4 py-3"
                 >
                     <div class="mb-2 flex items-center justify-between text-sm">
@@ -686,6 +688,8 @@ function scrollToOutput() {
                             <!-- Run header (clickable to expand) -->
                             <button
                                 class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-[var(--duration-micro)] hover:bg-accent"
+                                :aria-expanded="expandedHistoryId === run.id"
+                                aria-label="Toggle run history details"
                                 @click="toggleHistoryExpand(run.id)"
                             >
                                 <component

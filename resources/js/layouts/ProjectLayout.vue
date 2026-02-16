@@ -31,6 +31,9 @@ useKeyboardShortcuts({
 </script>
 
 <template>
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg focus:ring-2 focus:ring-ring">
+        Skip to main content
+    </a>
     <div class="flex min-h-screen w-full flex-col">
         <AppHeader v-model:show-shortcuts="showShortcutsOverlay" :current-project-slug="props.projectSlug" show-back />
         <DeviceStatusBanner />

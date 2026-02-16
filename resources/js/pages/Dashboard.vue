@@ -515,9 +515,9 @@ const isLoading = computed(() => page.props.devices === undefined);
                     <div class="flex flex-col gap-3">
                         <!-- Header: name + status -->
                         <div class="flex items-start justify-between gap-2">
-                            <h3 class="leading-snug font-medium">
+                            <h2 class="text-base leading-snug font-medium">
                                 {{ project.project_name }}
-                            </h3>
+                            </h2>
                             <Badge
                                 variant="outline"
                                 class="shrink-0 text-[10px] leading-tight"
