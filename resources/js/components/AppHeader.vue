@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
 import { ArrowLeft } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import BreadcrumbPicker from '@/components/BreadcrumbPicker.vue';
 import ConnectionStatusIndicator from '@/components/ConnectionStatusIndicator.vue';
-import KeyboardShortcutsOverlay from '@/components/KeyboardShortcutsOverlay.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,10 +19,10 @@ defineProps<{
     showBack?: boolean;
 }>();
 
+const showShortcuts = defineModel<boolean>('showShortcuts', { default: false });
+
 const page = usePage();
 const auth = computed(() => page.props.auth);
-
-const showShortcuts = ref(false);
 </script>
 
 <template>
@@ -80,6 +79,4 @@ const showShortcuts = ref(false);
             </div>
         </div>
     </header>
-
-    <KeyboardShortcutsOverlay v-model:open="showShortcuts" />
 </template>

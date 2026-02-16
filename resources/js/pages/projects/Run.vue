@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useChiefMessages } from '@/composables/useChiefMessages';
 import { useCommandRelay } from '@/composables/useCommandRelay';
 import { formatRelativeTime, useConnectionStatus } from '@/composables/useConnectionStatus';
+import { isInputFocused, isModKey } from '@/composables/useKeyboardShortcuts';
 import ProjectLayout from '@/layouts/ProjectLayout.vue';
 
 interface StoryDetail {
@@ -201,6 +202,52 @@ onMounted(() => {
             currentOutputStoryId.value = null;
         }
     });
+});
+
+// Run-specific keyboard shortcuts (Cmd+Enter, Cmd+., Escape)
+function handleRunKeydown(e: KeyboardEvent) {
+    // Cmd/Ctrl+Enter: Start or resume run
+    if (e.key === 'Enter' && isModKey(e)) {
+        e.preventDefault();
+        if (controlsDisabled.value) return;
+        if (showStartButton.value) {
+            handleStartRun();
+        } else if (showResumeButton.value) {
+            handleResumeRun();
+        }
+        return;
+    }
+
+    // Cmd/Ctrl+.: Pause run
+    if (e.key === '.' && isModKey(e)) {
+        e.preventDefault();
+        if (controlsDisabled.value) return;
+        if (showPauseButton.value) {
+            handlePauseRun();
+        }
+        return;
+    }
+
+    // Escape: Stop run (with confirmation) — only when not in input and no modal is open
+    if (e.key === 'Escape' && !isInputFocused()) {
+        if (showStopConfirm.value) {
+            // Don't interfere — ConfirmDialog handles its own Escape
+            return;
+        }
+        if (showStopButton.value && !controlsDisabled.value) {
+            e.preventDefault();
+            showStopConfirm.value = true;
+            return;
+        }
+    }
+}
+
+onMounted(() => {
+    document.addEventListener('keydown', handleRunKeydown);
+});
+
+onUnmounted(() => {
+    document.removeEventListener('keydown', handleRunKeydown);
 });
 
 function triggerShake() {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { X } from 'lucide-vue-next';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 const props = defineProps<{
     open: boolean;
@@ -29,20 +29,6 @@ const shortcuts = computed(() => [
 function close() {
     emit('update:open', false);
 }
-
-function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-        close();
-    }
-}
-
-onMounted(() => {
-    document.addEventListener('keydown', handleKeydown);
-});
-
-onUnmounted(() => {
-    document.removeEventListener('keydown', handleKeydown);
-});
 </script>
 
 <template>

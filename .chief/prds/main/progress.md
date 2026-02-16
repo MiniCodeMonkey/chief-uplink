@@ -131,6 +131,13 @@
 - `NotificationPreferenceController` updates `notification_preferences` JSON column — use PATCH with JSON body
 - Redis timer key `email:batch:timer:{user_id}` prevents multiple digest jobs per batch window — cleared when batch is flushed
 - In tests, Redis keys persist across test cases (not reset by RefreshDatabase) — explicitly delete with `$redis->del()` in `beforeEach`
+- CommandPalette component mounted in both AppLayout and ProjectLayout — uses Teleport to body, Cmd+K toggle
+- Vue template `as` casts trigger ESLint `vue/no-deprecated-filter` — use helper functions for type assertions in templates
+- `useKeyboardShortcuts` composable handles global shortcuts (Cmd+K, ?, Escape for overlays) — used in AppLayout and ProjectLayout
+- Run-specific shortcuts (Cmd+Enter, Cmd+., Escape for stop) are handled directly in Run.vue via `handleRunKeydown` listener
+- `isInputFocused()`, `isModKey()`, `isMacPlatform()` exported from `useKeyboardShortcuts.ts` for reuse
+- `AppHeader` accepts `v-model:show-shortcuts` to externalize keyboard shortcuts overlay state to parent layout
+- `KeyboardShortcutsOverlay` no longer has its own Escape handler — parent layout composable handles closing
 
 ---
 
@@ -1580,5 +1587,63 @@
   - Some stories may already be fully implemented by prerequisite stories — always check existing code before implementing
   - US-040 (Push Notifications) and US-041 (Email Notifications) already implemented the full preferences page and toggles as part of their notification system setup
   - The notification preferences page serves as the central hub for both push and email notification control
+
+---
+
+## 2026-02-16 - US-043
+- What was implemented:
+  - CommandPalette.vue component: full-screen modal overlay with fuzzy search, keyboard navigation, and result categorization
+  - Triggered by Cmd+K (Mac) / Ctrl+K (Windows/Linux) from any authenticated page
+  - Searchable items: all projects (by name, device, branch), all servers (by name, with connection status dots), and actions (Clone Repository, Create Project, New PRD, Start Run, Settings, Sign Out)
+  - Results grouped by category: Projects, Servers, Actions with category badges
+  - Fuzzy search with type-ahead highlighting (matching characters highlighted in accent color)
+  - Arrow keys navigate results, Enter selects, Escape closes, click outside dismisses
+  - Recently used items appear first when palette opens with no query (stored in localStorage)
+  - Smooth scale-up/scale-down animations using design system CSS variables
+  - Auto-focus on search input when palette opens
+  - Integrated into both AppLayout and ProjectLayout for full coverage
+  - Footer with keyboard navigation hints (↑↓ navigate, ↵ select, esc close)
+- Files changed:
+  - resources/js/components/CommandPalette.vue (new — main command palette component)
+  - resources/js/layouts/AppLayout.vue (added Cmd+K handler + CommandPalette mount)
+  - resources/js/layouts/ProjectLayout.vue (added Cmd+K handler + CommandPalette mount)
+  - .chief/prds/main/prd.json (US-043 passes: true)
+- **Learnings for future iterations:**
+  - Vue template `as` keyword (TypeScript type assertion) triggers ESLint `vue/no-deprecated-filter` rule — use helper functions instead of inline type casts in templates
+  - StatusDot component doesn't have a `size` prop — uses CSS class `.status-dot` for fixed 2.5 size
+  - Both AppLayout and ProjectLayout are separate layouts that need their own keyboard handlers — they don't share a common ancestor
+  - Teleport to body is the standard pattern for modals/overlays in this codebase
+  - Design system transition variables: `--duration-standard` (200ms), `--duration-micro` (100ms), `--ease-snappy` for UI responses
+
+---
+
+## 2026-02-16 - US-044
+- What was implemented:
+  - Created `useKeyboardShortcuts` composable (`resources/js/composables/useKeyboardShortcuts.ts`) handling global keyboard shortcuts
+  - Cmd/Ctrl+K: Toggle command palette (works even in input fields)
+  - ?: Toggle keyboard shortcuts help overlay (disabled in input fields)
+  - Escape: Close command palette or shortcuts overlay
+  - Integrated composable into `AppLayout.vue` and `ProjectLayout.vue`, replacing inline `handleGlobalKeydown` handlers
+  - Added run-specific shortcuts in `Run.vue`: Cmd/Ctrl+Enter (start/resume), Cmd/Ctrl+. (pause), Escape (stop with confirmation)
+  - Run shortcuts are context-aware — only active on the Run tab, check `showStartButton`/`showResumeButton`/`showPauseButton`/`showStopButton` state
+  - Updated `AppHeader.vue` to use `v-model:show-shortcuts` pattern, removing internal shortcut overlay state
+  - Removed duplicate Escape handler from `KeyboardShortcutsOverlay.vue` (now managed by parent composable)
+  - Exported `isInputFocused()`, `isModKey()`, `isMacPlatform()` utilities for reuse
+  - Shortcuts use Cmd on Mac (detected via `navigator.platform`), Ctrl on Windows/Linux
+  - Shortcut help accessible from user avatar dropdown (existing `UserMenuContent` emits `show-shortcuts`)
+- Files changed:
+  - resources/js/composables/useKeyboardShortcuts.ts (new)
+  - resources/js/layouts/AppLayout.vue (updated)
+  - resources/js/layouts/ProjectLayout.vue (updated)
+  - resources/js/components/AppHeader.vue (updated)
+  - resources/js/components/KeyboardShortcutsOverlay.vue (updated)
+  - resources/js/pages/projects/Run.vue (updated)
+  - .chief/prds/main/prd.json (US-044 passes: true)
+- **Learnings for future iterations:**
+  - Both AppLayout and ProjectLayout need the same global shortcuts — use a shared composable to avoid duplication
+  - Run.vue adds its own keydown listener for page-specific shortcuts rather than complicating the layout-level composable
+  - KeyboardShortcutsOverlay should not have its own Escape handler when the parent manages open/close state — avoids double-firing
+  - `defineModel` in Vue 3.4+ works well for v-model patterns between layout and header components
+  - ESLint import/order rule requires composable imports to be alphabetically sorted within `@/composables/` group
 
 ---
