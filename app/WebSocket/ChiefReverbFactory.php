@@ -17,10 +17,11 @@ class ChiefReverbFactory extends Factory
     {
         $routes = parent::pusherRoutes($path);
 
-        // Add the chief server WebSocket route
+        // Add the chief server WebSocket route (must include $path prefix
+        // since parent::pusherRoutes already applied addPrefix to its routes)
         $routes->add(
             'chief_server',
-            Route::get('/ws/server', new ChiefServerController(
+            Route::get($path.'/ws/server', new ChiefServerController(
                 app(ServerConnectionManager::class)
             ))
         );

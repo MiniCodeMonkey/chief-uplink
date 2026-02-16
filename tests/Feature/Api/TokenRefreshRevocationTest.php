@@ -595,6 +595,28 @@ test('ws_url is null when reverb host not configured', function () {
         ->assertJsonPath('ws_url', null);
 });
 
+test('ws_url includes reverb server path prefix', function () {
+    config()->set('reverb.apps.apps.0.options.host', 'ws-host.example.com');
+    config()->set('reverb.apps.apps.0.options.port', 443);
+    config()->set('reverb.apps.apps.0.options.scheme', 'https');
+    config()->set('reverb.servers.reverb.path', '/apps/myapp');
+
+    $refreshToken = Str::random(64);
+    $user = User::factory()->create();
+    DeviceAuthorization::factory()->create([
+        'user_id' => $user->id,
+        'refresh_token_hash' => Hash::make($refreshToken),
+    ]);
+
+    $response = $this->postJson('/api/oauth/token', [
+        'grant_type' => 'refresh_token',
+        'refresh_token' => $refreshToken,
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('ws_url', 'wss://ws-host.example.com/apps/myapp/ws/server');
+});
+
 test('only the most recent previous token triggers compromise detection', function () {
     $refreshToken = Str::random(64);
     $user = User::factory()->create();

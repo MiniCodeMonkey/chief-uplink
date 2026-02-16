@@ -271,6 +271,7 @@ class DeviceOAuthController extends Controller
         $scheme = ($options['scheme'] ?? 'https') === 'https' ? 'wss' : 'ws';
         $port = (int) ($options['port'] ?? ($scheme === 'wss' ? 443 : 80));
         $defaultPort = $scheme === 'wss' ? 443 : 80;
+        $serverPath = config('reverb.servers.reverb.path', '');
 
         $url = "{$scheme}://{$host}";
 
@@ -278,7 +279,7 @@ class DeviceOAuthController extends Controller
             $url .= ":{$port}";
         }
 
-        return "{$url}/ws/server";
+        return "{$url}{$serverPath}/ws/server";
     }
 
     /**
