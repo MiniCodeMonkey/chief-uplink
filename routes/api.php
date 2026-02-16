@@ -57,3 +57,18 @@ Route::middleware(['device.auth', 'throttle:general-api'])->group(function () {
         ]);
     })->name('device.status');
 });
+
+/*
+|--------------------------------------------------------------------------
+| Device API Routes (new HTTP-based transport)
+|--------------------------------------------------------------------------
+|
+| Routes for the HTTP+Pusher transport replacing the custom WebSocket.
+| The device.api middleware authenticates via HMAC access tokens and
+| sets device_id, user_id, and device_authorization on request attributes.
+|
+*/
+
+Route::prefix('device')->middleware(['device.api'])->group(function () {
+    // Endpoints will be added by subsequent user stories (US-003 through US-009)
+});
