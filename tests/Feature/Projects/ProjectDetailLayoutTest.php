@@ -37,6 +37,9 @@ describe('Project Detail Routes', function () {
             ->component('projects/Run')
             ->where('projectSlug', 'test-project')
             ->where('projectName', 'Test Project')
+            ->has('deviceId')
+            ->has('project')
+            ->has('runHistory')
         );
     });
 

@@ -57,9 +57,39 @@ class ProjectController extends Controller
     {
         $project = $this->findProject($request, $slug);
 
+        $runHistory = RunHistory::where('device_authorization_id', $project->device_authorization_id)
+            ->where('project_slug', $project->project_slug)
+            ->orderByDesc('started_at')
+            ->limit(20)
+            ->get()
+            ->map(fn (RunHistory $run) => [
+                'id' => $run->id,
+                'prd_name' => $run->prd_name,
+                'status' => $run->status,
+                'stories_completed' => $run->stories_completed,
+                'stories_total' => $run->stories_total,
+                'story_results' => $run->story_results,
+                'duration_seconds' => $run->duration_seconds,
+                'tokens_used' => $run->tokens_used,
+                'error_message' => $run->error_message,
+                'started_at' => $run->started_at?->toISOString(),
+                'finished_at' => $run->finished_at?->toISOString(),
+            ]);
+
         return Inertia::render('projects/Run', [
             'projectSlug' => $project->project_slug,
             'projectName' => $project->project_name,
+            'deviceId' => $project->device_authorization_id,
+            'project' => [
+                'id' => $project->id,
+                'status' => $project->status,
+                'current_prd_name' => $project->current_prd_name,
+                'stories_completed' => $project->stories_completed,
+                'stories_total' => $project->stories_total,
+                'story_details' => $project->story_details,
+                'tokens_used' => null,
+            ],
+            'runHistory' => $runHistory,
         ]);
     }
 
