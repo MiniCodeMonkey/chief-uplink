@@ -17,3 +17,4 @@ Artisan::command('ws:buffer:cleanup', function () {
 
 Schedule::command('ws:buffer:cleanup')->everyMinute();
 Schedule::command('prd:check-timeouts')->everyMinute();
+Schedule::command('device:check-heartbeats')->everyMinute();

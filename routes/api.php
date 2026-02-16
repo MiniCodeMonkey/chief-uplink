@@ -78,4 +78,6 @@ Route::prefix('device')->middleware(['device.api'])->group(function () {
         ->name('device.messages');
     Route::post('/broadcasting/auth', [\App\Http\Controllers\Api\DeviceBroadcastAuthController::class, 'authenticate'])
         ->name('device.broadcasting.auth');
+    Route::post('/heartbeat', [\App\Http\Controllers\Api\DeviceHeartbeatController::class, 'beat'])
+        ->name('device.heartbeat');
 });
