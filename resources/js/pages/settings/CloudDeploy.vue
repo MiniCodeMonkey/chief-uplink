@@ -744,7 +744,7 @@ const sshCommand = computed(() => {
                                         <p class="mb-2 text-xs text-muted-foreground">SSH Access</p>
                                         <div class="flex items-center justify-between gap-2">
                                             <code class="text-sm font-mono">{{ sshCommand }}</code>
-                                            <CopyButton :text="sshCommand" />
+                                            <CopyButton :value="sshCommand" label="Copy SSH" />
                                         </div>
                                     </div>
 

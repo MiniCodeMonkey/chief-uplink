@@ -588,7 +588,7 @@ function scrollToOutput() {
                         :value="project.stories_completed"
                         :max="project.stories_total"
                         class="h-2"
-                        indicator-class="transition-all duration-500"
+                        indicator-class="transition-all duration-300"
                     />
                     <!-- Stats below progress bar -->
                     <div class="mt-2 flex items-center gap-3 text-xs text-muted-foreground">

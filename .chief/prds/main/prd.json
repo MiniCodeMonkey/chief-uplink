@@ -1144,7 +1144,8 @@
         "Performance audit: Lighthouse score \u003e 90 for Performance on both mobile and desktop. Time to Interactive \u003c 3s. No unnecessary re-renders (verify with Vue DevTools)."
       ],
       "priority": 57,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-058",

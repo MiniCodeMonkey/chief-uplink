@@ -543,7 +543,7 @@ const isLoading = computed(() => page.props.devices === undefined);
                                     :value="project.stories_completed ?? 0"
                                     :max="project.stories_total"
                                     class="h-1.5"
-                                    indicator-class="transition-all duration-500"
+                                    indicator-class="transition-all duration-300"
                                 />
                                 <p class="text-[11px] text-muted-foreground">
                                     {{ project.stories_completed ?? 0 }}/{{

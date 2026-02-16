@@ -118,9 +118,9 @@ const memberSince = new Date(user.created_at).toLocaleDateString(undefined, {
                         >
 
                         <Transition
-                            enter-active-class="transition ease-in-out"
+                            enter-active-class="transition duration-200 ease-in-out"
                             enter-from-class="opacity-0"
-                            leave-active-class="transition ease-in-out"
+                            leave-active-class="transition duration-200 ease-in-out"
                             leave-to-class="opacity-0"
                         >
                             <p
