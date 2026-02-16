@@ -16,3 +16,10 @@ Broadcast::channel('device.{deviceId}', function ($user, $deviceId) {
         ->whereNull('revoked_at')
         ->exists();
 });
+
+Broadcast::channel('chief-server.{deviceId}', function ($user, $deviceId) {
+    return $user->deviceAuthorizations()
+        ->where('id', $deviceId)
+        ->whereNull('revoked_at')
+        ->exists();
+});

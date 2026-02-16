@@ -48,6 +48,33 @@ describe('Device Channel Authorization', function () {
     });
 });
 
+describe('Chief Server Channel Authorization', function () {
+    it('authorizes user for their own chief-server channel', function () {
+        $device = DeviceAuthorization::factory()->for($this->user)->create();
+
+        $result = Broadcast::driver()->getChannels()['chief-server.{deviceId}'];
+
+        expect($result($this->user, $device->id))->toBeTrue();
+    });
+
+    it('rejects user for another users device chief-server channel', function () {
+        $otherUser = User::factory()->create();
+        $otherDevice = DeviceAuthorization::factory()->for($otherUser)->create();
+
+        $result = Broadcast::driver()->getChannels()['chief-server.{deviceId}'];
+
+        expect($result($this->user, $otherDevice->id))->toBeFalse();
+    });
+
+    it('rejects revoked device chief-server channel', function () {
+        $device = DeviceAuthorization::factory()->for($this->user)->revoked()->create();
+
+        $result = Broadcast::driver()->getChannels()['chief-server.{deviceId}'];
+
+        expect($result($this->user, $device->id))->toBeFalse();
+    });
+});
+
 describe('Broadcast Events', function () {
     it('DeviceConnected broadcasts to user channel', function () {
         $event = new DeviceConnected(1, $this->user->id);
