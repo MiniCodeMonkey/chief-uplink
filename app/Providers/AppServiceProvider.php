@@ -2,9 +2,14 @@
 
 namespace App\Providers;
 
+use App\Events\ChiefMessageReceived;
+use App\Events\DeviceDisconnected;
+use App\Listeners\ScheduleOfflinePushNotification;
+use App\Listeners\SendPushForChiefMessage;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -24,6 +29,13 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->registerPushNotificationListeners();
+    }
+
+    protected function registerPushNotificationListeners(): void
+    {
+        Event::listen(ChiefMessageReceived::class, SendPushForChiefMessage::class);
+        Event::listen(DeviceDisconnected::class, ScheduleOfflinePushNotification::class);
     }
 
     /**

@@ -781,7 +781,8 @@
         "Rate limit: max 20 push notifications per user per hour"
       ],
       "priority": 40,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-041",

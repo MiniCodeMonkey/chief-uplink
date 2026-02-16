@@ -113,6 +113,18 @@
 - Cloud-init script uses setup token to auto-exchange for access+refresh tokens via `/api/oauth/device/exchange`
 - Deploy status polling: GET `/settings/cloud-deploy/{id}/status` — checks provider API for provisioning→active transition
 - Wizard pages use `fetch()` for AJAX calls (regions/tiers/deploy) instead of Inertia form submissions — CSRF token from meta tag
+- `minishlink/web-push` package for server-side Web Push API — requires `--ignore-platform-req=ext-zip` on install
+- VAPID keys configured via `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` env vars — generate with `php artisan webpush:vapid`
+- Push subscriptions stored in `push_subscriptions` table — `PushSubscription` model with `user_id`, `endpoint`, `p256dh_key`, `auth_token`
+- `WebPushService` sends notifications and auto-removes expired subscriptions (404/410 responses)
+- `SendPushNotification` job handles rate limiting (20/user/hour) and user preference checks before sending
+- Push notification triggers: `SendPushForChiefMessage` listener on `ChiefMessageReceived` (run_complete, run_paused, quota_exhausted)
+- Device offline push: `ScheduleOfflinePushNotification` listener on `DeviceDisconnected` → dispatches `SendDeviceOfflinePush` with 2-min delay
+- Service worker at `public/sw.js` — registered in `app.ts`, handles push events and notification click deep-linking
+- `usePushNotifications` composable manages browser-side subscription/unsubscription with CSRF-authenticated fetch calls
+- Settings → Preferences page at `/settings/preferences` for push notification opt-in toggle
+- Event listeners registered in `AppServiceProvider::boot()` via `Event::listen()`
+- CSRF token meta tag added to `app.blade.php` for fetch-based API calls
 
 ---
 
@@ -1404,5 +1416,100 @@
   - Hetzner server type pricing is nested in `prices[].price_monthly.gross` — need fallback mapping for missing prices
   - ESLint catches unused imports and stray closing tags — check before committing
   - The `Link` component from Inertia needs explicit import when adding navigation links to existing Vue pages
+
+---
+
+## 2026-02-16 - US-039
+- What was implemented:
+  - VPS Management UI on the Settings → Cloud Servers page
+  - Cloud deployments listed alongside existing API key management, sorted by status (active first, destroyed last)
+  - Each server card shows: provider badge, region (human-readable), tier, status badge (Active/Provisioning/Suspended/Destroyed), IP address (copyable), SSH command (copyable), linked device name with online/offline StatusDot, monthly cost
+  - Provisioning servers show animated spinner progress indicator
+  - Destroyed servers are grayed out (opacity-50) and kept in history
+  - "Restart Chief" button on active servers — calls provider API to reboot the VPS
+  - "Destroy Server" button with double-confirmation dialog (ConfirmDialog with confirmText requiring IP address input)
+  - Backend routes: POST `/settings/cloud-deploy/{id}/restart` and DELETE `/settings/cloud-deploy/{id}`
+  - Provider-specific restart methods (Hetzner reboot action, DigitalOcean reboot action)
+  - Provider-specific destroy methods (Hetzner DELETE server, DigitalOcean DELETE droplet) — handles 404 gracefully
+  - Empty state: "No cloud servers. Deploy one to run Chief without managing your own VPS." with Deploy Server action button
+  - Updated `CloudProviderKeyController::index()` to pass `deployments` prop with device authorization eager-loaded
+  - 13 new tests: restart chief (hetzner, digitalocean, non-active, other user), destroy server (hetzner, digitalocean, provisioning, already destroyed, other user, provider 404), deployment listing (basic, user scoping, destroyed in history)
+  - All 434 tests passing, Pint clean, ESLint clean
+- Files changed:
+  - app/Http/Controllers/Settings/CloudDeployController.php (added: restartChief, destroy, restart/destroy provider methods)
+  - app/Http/Controllers/Settings/CloudProviderKeyController.php (updated: index now passes deployments with device auth)
+  - resources/js/pages/settings/CloudServers.vue (rewritten: added VPS management section with server cards, actions, empty state)
+  - routes/settings.php (added: restart and destroy routes)
+  - tests/Feature/Settings/CloudDeployTest.php (added: 10 new tests for restart/destroy)
+  - tests/Feature/Settings/CloudProviderKeyTest.php (added: 3 new tests for deployments listing)
+- **Learnings for future iterations:**
+  - CloudServers page now has two sections: "Servers" (deployments) and "API Keys" (provider keys) — keep both when modifying
+  - Restart/destroy actions use `fetch()` with CSRF token (like cloud deploy wizard) instead of Inertia forms — for JSON responses
+  - ConfirmDialog `confirmText` prop enables type-to-confirm — used for destructive server deletion (type IP to confirm)
+  - Provider API 404 on delete is acceptable (server already gone) — handle gracefully, still mark as destroyed
+  - CloudDeployment controller methods scope queries to `$request->user()->cloudDeployments()` for user isolation
+  - Destroyed servers excluded from restart/destroy scoping via `whereIn('status', [...])` — prevents operating on already-destroyed servers
+
+---
+
+## 2026-02-16 - US-040
+- What was implemented:
+  - Web Push API via service worker (`public/sw.js`) with push event handling and notification click deep-linking
+  - `minishlink/web-push` PHP package for server-side push notification sending
+  - `PushSubscription` model, migration, and factory for storing browser push subscriptions
+  - `WebPushService` for sending push notifications with automatic expired subscription cleanup
+  - `SendPushNotification` queued job with rate limiting (20/user/hour) and preference checks
+  - `SendPushForChiefMessage` event listener on `ChiefMessageReceived` — triggers push for `run_complete`, `run_paused`, `quota_exhausted` messages
+  - `ScheduleOfflinePushNotification` event listener on `DeviceDisconnected` — schedules `SendDeviceOfflinePush` job with 2-minute delay
+  - `SendDeviceOfflinePush` job that checks if device is still offline before sending notification
+  - `PushSubscriptionController` with store/destroy endpoints for managing browser subscriptions
+  - `usePushNotifications` Vue composable for browser-side subscription management
+  - Settings → Preferences page (`/settings/preferences`) with push notification toggle, browser permission denied note, and unsupported browser message
+  - `GenerateVapidKeys` artisan command (`webpush:vapid`)
+  - VAPID key configuration in `config/webpush.php`
+  - Service worker registration in `app.ts`
+  - CSRF meta tag in `app.blade.php` for fetch-based API calls
+  - Push subscription cleanup on account deletion
+  - Each notification includes: title, body, project name, server name, and deep-link URL
+  - User relationship `pushSubscriptions()` added to User model
+  - Preferences nav item added to Settings layout
+  - 22 new tests (13 subscription tests + 9 notification trigger tests)
+  - All 461 tests passing, Pint clean, ESLint clean, Prettier clean
+- Files changed:
+  - composer.json, composer.lock (added minishlink/web-push)
+  - .env.example (added VAPID vars)
+  - config/webpush.php (new)
+  - database/migrations/2026_02_16_022105_create_push_subscriptions_table.php (new)
+  - app/Models/PushSubscription.php (new)
+  - database/factories/PushSubscriptionFactory.php (new)
+  - app/Models/User.php (added pushSubscriptions relationship)
+  - app/Services/WebPushService.php (new)
+  - app/Jobs/SendPushNotification.php (new)
+  - app/Jobs/SendDeviceOfflinePush.php (new)
+  - app/Listeners/SendPushForChiefMessage.php (new)
+  - app/Listeners/ScheduleOfflinePushNotification.php (new)
+  - app/Http/Controllers/Settings/PushSubscriptionController.php (new)
+  - app/Http/Controllers/Settings/ProfileController.php (added push subscription cleanup on delete)
+  - app/Console/Commands/GenerateVapidKeys.php (new)
+  - app/Providers/AppServiceProvider.php (registered event listeners)
+  - bootstrap/app.php (added push notification rate limiter)
+  - routes/settings.php (added push subscription and preferences routes)
+  - public/sw.js (new)
+  - resources/js/app.ts (service worker registration)
+  - resources/js/composables/usePushNotifications.ts (new)
+  - resources/js/pages/settings/Preferences.vue (new)
+  - resources/js/layouts/settings/Layout.vue (added Preferences nav)
+  - resources/views/app.blade.php (added CSRF meta tag)
+  - tests/Feature/Notifications/PushSubscriptionTest.php (new)
+  - tests/Feature/Notifications/PushNotificationTest.php (new)
+- **Learnings for future iterations:**
+  - `minishlink/web-push` requires ext-zip which has dependency issues on this system — use `--ignore-platform-req=ext-zip`
+  - Event listeners registered in AppServiceProvider via `Event::listen()` — Laravel 12 doesn't use EventServiceProvider
+  - Service worker must be at the root path (`public/sw.js`) to have scope over the entire app
+  - Push subscription endpoints return JSON (not Inertia redirects) — use `postJson`/`deleteJson` in tests
+  - The Toggle component uses `modelValue`/`update:modelValue`, not `pressed`/`update:pressed`
+  - CSRF token is available via meta tag in blade template — used by composables that make fetch calls
+  - Device offline push uses delayed job dispatch (2 min) — check `is_online` before sending to avoid false positives
+  - Push notification rate limiting uses `RateLimiter::tooManyAttempts()` in the job, not middleware
 
 ---

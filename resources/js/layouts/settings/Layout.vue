@@ -28,6 +28,10 @@ const sidebarNavItems: NavItem[] = [
         title: 'Appearance',
         href: editAppearance(),
     },
+    {
+        title: 'Preferences',
+        href: '/settings/preferences',
+    },
 ];
 
 const { isCurrentUrl } = useCurrentUrl();

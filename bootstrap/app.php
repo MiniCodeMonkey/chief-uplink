@@ -60,6 +60,11 @@ return Application::configure(basePath: dirname(__DIR__))
         RateLimiter::for('cloud-deploy', function (Request $request) {
             return Limit::perHour(5)->by($request->user()?->id ?: $request->ip());
         });
+
+        // Push notifications: 20 per user per hour (enforced in SendPushNotification job)
+        RateLimiter::for('push-notifications', function (Request $request) {
+            return Limit::perHour(20)->by($request->user()?->id ?: $request->ip());
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

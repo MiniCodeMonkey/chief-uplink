@@ -54,6 +54,9 @@ class ProfileController extends Controller
             ->whereNotIn('status', ['destroyed'])
             ->update(['status' => 'destroyed']);
 
+        // Remove push subscriptions
+        $user->pushSubscriptions()->delete();
+
         // Remove personal data before soft delete
         $user->email = null;
         $user->avatar_url = null;

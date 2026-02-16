@@ -27,3 +27,10 @@ createInertiaApp({
 
 // This will set light / dark mode on page load...
 initializeTheme();
+
+// Register the push notification service worker
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+        // Service worker registration failed — push notifications won't work
+    });
+}

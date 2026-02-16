@@ -4,6 +4,7 @@ use App\Http\Controllers\Settings\CloudDeployController;
 use App\Http\Controllers\Settings\CloudProviderKeyController;
 use App\Http\Controllers\Settings\DeviceController;
 use App\Http\Controllers\Settings\ProfileController;
+use App\Http\Controllers\Settings\PushSubscriptionController;
 use App\Http\Middleware\EnsureEmailProvided;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -40,4 +41,12 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
     Route::get('settings/appearance', function () {
         return Inertia::render('settings/Appearance');
     })->name('appearance.edit');
+
+    Route::get('settings/preferences', function () {
+        return Inertia::render('settings/Preferences');
+    })->name('preferences.edit');
+
+    // Push notification subscriptions
+    Route::post('settings/push-subscription', [PushSubscriptionController::class, 'store'])->name('push-subscription.store');
+    Route::delete('settings/push-subscription', [PushSubscriptionController::class, 'destroy'])->name('push-subscription.destroy');
 });

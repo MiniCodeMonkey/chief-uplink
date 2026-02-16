@@ -87,4 +87,12 @@ class User extends Authenticatable
     {
         return $this->hasMany(ProviderApiKey::class);
     }
+
+    /**
+     * @return HasMany<PushSubscription, $this>
+     */
+    public function pushSubscriptions(): HasMany
+    {
+        return $this->hasMany(PushSubscription::class);
+    }
 }
