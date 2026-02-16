@@ -72,6 +72,12 @@
 - `ServerConnectionManager` stores Connection objects for sending messages to chief servers — `sendToDevice()` / `isDeviceOnline()`
 - Vue composables: `useCommandRelay` for sending commands, `useChiefMessages` for receiving chief events
 - Pest test files in same directory can't define functions with same name — use unique names per file
+- Run tab uses split layout: story list left (lg:w-1/2), Claude output right — `hasActiveRun` computed controls right panel visibility
+- `story_details` JSON format: `[{id: "US-001", title: "...", status: "completed|in_progress|failed|pending", iterations?: N, error_summary?: "..."}]`
+- `RunHistory.story_results` has same format as `CachedProjectState.story_details` — used for expanded run history view
+- Run controls use optimistic UI: `optimisticState` ref overrides server status, cleared by WebSocket events (`run_progress`, `run_complete`, `run_paused`) or server prop changes
+- Run commands sent via `useCommandRelay.sendCommand()` which has built-in 300ms debounce — no extra double-click protection needed
+- `.shake` CSS class (not `animate-shake`) for error rollback animation
 
 ---
 
@@ -856,5 +862,75 @@
   - Select component from reka-ui uses `v-model` for the selected value
   - Form dirty tracking compares each form value against `serverSettings` ref — update serverSettings when server confirms changes
   - `beforeunload` event handler requires `e.preventDefault()` (no need for `returnValue` in modern browsers)
+
+---
+
+## 2026-02-16 - US-023
+- What was implemented:
+  - Run Tab with story list showing all stories with status icons: checkmark (completed, green), spinning loader (in progress, amber pulsing), hollow circle (pending, gray), X (failed, red)
+  - Each story row shows: status icon, story ID (monospace), story title, iteration count for completed/in-progress stories
+  - In-progress story visually prominent with highlighted background (bg-primary/5) and spinning icon
+  - Failed stories can show brief error summary inline
+  - Progress bar spanning full width at top: stories completed/total with percentage
+  - Stats below progress bar: tokens used (when available)
+  - Mobile: single column, story list scrollable
+  - Desktop: story list on left, Claude output panel placeholder on right (split layout with lg:w-1/2)
+  - Click completed story → navigates to diffs tab
+  - Click in-progress story → scrolls to Claude output panel
+  - Run history section: expandable accordion showing past runs with status badges, story counts, duration, tokens, timestamps
+  - Expanded run shows error messages and per-story results when available
+  - All run history statuses supported (completed/failed/paused/stopped)
+  - Empty states: "No runs yet" for no runs, "No active run" text for idle projects with history
+  - ProjectController updated: run() method now passes full project data (status, stories, story_details, tokens) + run history (20 entries, sorted by most recent, scoped to device + project slug)
+  - Updated ProjectDetailLayoutTest to verify new Run tab props (deviceId, project, runHistory)
+  - 14 new tests: project data rendering with story details, running/idle/error story statuses, run history sorting, 20-entry limit, project slug scoping, all history fields, empty history, all status types, access control (404/auth), cross-device isolation
+  - All 325 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - app/Http/Controllers/ProjectController.php (updated: run() passes project data + runHistory)
+  - resources/js/pages/projects/Run.vue (rewritten: full story list, progress bar, run history accordion)
+  - tests/Feature/Projects/ProjectDetailLayoutTest.php (updated: Run tab props assertion)
+  - tests/Feature/Projects/RunTabTest.php (new: 14 tests)
+  - .chief/prds/main/prd.json (updated: US-023 passes: true)
+- **Learnings for future iterations:**
+  - Run tab uses split layout: `lg:flex-row` for desktop side-by-side, column for mobile — story list on left, Claude output on right
+  - Story details come from `CachedProjectState.story_details` (JSON array with id, title, status fields)
+  - Run history entries have `story_results` field (different from CachedProjectState's `story_details`) — both are arrays of story objects
+  - `Loader2` with `animate-spin` from lucide-vue-next is used for in-progress story spinning icon
+  - Run tab run history limit is 20 (vs Overview's 5) for more comprehensive history view
+  - The Claude output panel is a placeholder for US-025 (Live Claude Output Streaming) — shows when `hasActiveRun` is true (running/paused/error)
+  - `formatRelativeTime` and `formatDuration`/`formatTokens` are reused patterns from Overview.vue
+
+---
+
+## 2026-02-16 - US-024
+- What was implemented:
+  - Run Controls bar pinned at top of Run tab with Start Run, Pause, Resume, and Stop buttons
+  - Start Run button (primary accent) visible when no run is active, sends `start_run` via WebSocket relay
+  - Pause button (secondary) visible during active run, sends `pause_run` with immediate visual feedback
+  - Resume button (primary) visible when paused, sends `resume_run`
+  - Stop button (destructive) with ConfirmDialog: "Stop this run? Progress will be saved but the current story will be abandoned."
+  - Optimistic UI: buttons change state immediately on click (e.g., "Start" → "Starting..." with spinner), rollback with shake animation on server rejection
+  - Button transitions animated with Vue `<Transition>` for smooth crossfade between control states
+  - All controls wrapped in Tooltip for "Server offline" tooltip when device is offline
+  - Controls disabled when server is offline via `useConnectionStatus().isOnline`
+  - Double-click protection via `useCommandRelay`'s built-in 300ms debounce on `pendingCommands`
+  - Graceful handling of duplicate commands: ALREADY_RUNNING, NOT_RUNNING, ALREADY_PAUSED error codes from chief silently clear optimistic state without showing errors
+  - PRD name indicator shown in control bar when a run is active
+  - Chief message subscription via `useChiefMessages`: listens for `run_progress`, `run_complete`, `run_paused` to confirm state transitions and clear optimistic state
+  - Shake animation on error rollback (using existing `.shake` CSS class)
+  - 10 new tests covering: deviceId prop, all status states (running/idle/paused/error), current_prd_name display, null PRD, multi-device deviceId correctness, access control, revoked device access
+  - All 335 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - resources/js/pages/projects/Run.vue (updated: added run controls bar with optimistic UI, WebSocket commands, tooltips, transitions)
+  - tests/Feature/Projects/RunControlsTest.php (new: 10 tests)
+  - .chief/prds/main/prd.json (updated: US-024 passes: true)
+- **Learnings for future iterations:**
+  - Optimistic UI for run controls uses a `optimisticState` ref that overrides server status — cleared when server confirms via WebSocket event or when server props change
+  - The `.shake` CSS class (not `animate-shake`) is available for error rollback animation feedback
+  - `useCommandRelay` provides built-in 300ms debounce via `pendingCommands` Set — no additional debounce needed for double-click protection
+  - `useChiefMessages` subscribes to device channel and handles `run_progress`, `run_complete`, `run_paused`, `error` events for state reconciliation
+  - TooltipProvider must wrap all Tooltip components — place it once in the control bar container
+  - Vue `<Transition>` with `v-if` on buttons creates smooth crossfade between control states (start → pause+stop, etc.)
+  - The ConfirmDialog component uses `v-model:open` for two-way binding with the dialog visibility state
 
 ---

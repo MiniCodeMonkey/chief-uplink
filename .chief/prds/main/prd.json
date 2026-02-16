@@ -467,7 +467,8 @@
         "Double-click/tap protection: buttons debounce rapid clicks (300ms cooldown)"
       ],
       "priority": 24,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-025",

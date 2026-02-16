@@ -9,13 +9,21 @@ import {
     CircleDot,
     Clock,
     Loader2,
+    Pause,
+    Play,
+    Square,
     XCircle,
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ProgressBar } from '@/components/ui/progress-bar';
-import { formatRelativeTime } from '@/composables/useConnectionStatus';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useChiefMessages } from '@/composables/useChiefMessages';
+import { useCommandRelay } from '@/composables/useCommandRelay';
+import { formatRelativeTime, useConnectionStatus } from '@/composables/useConnectionStatus';
 import ProjectLayout from '@/layouts/ProjectLayout.vue';
 
 interface StoryDetail {
@@ -58,12 +66,61 @@ const props = defineProps<{
     runHistory: RunHistoryItem[];
 }>();
 
+const { isOnline } = useConnectionStatus();
+const { sendCommand } = useCommandRelay();
+const { subscribe, on } = useChiefMessages(props.deviceId);
 const expandedHistoryId = ref<number | null>(null);
+const showStopConfirm = ref(false);
 
-const isRunning = computed(() => props.project.status === 'running');
-const isPaused = computed(() => props.project.status === 'paused');
-const isError = computed(() => props.project.status === 'error');
-const hasActiveRun = computed(() => isRunning.value || isPaused.value || isError.value);
+// Optimistic run state — tracks what we optimistically believe the run state is
+type RunState = 'idle' | 'running' | 'paused' | 'error' | 'no_prd' | 'starting' | 'pausing' | 'resuming' | 'stopping';
+const optimisticState = ref<RunState | null>(null);
+const shakeControl = ref(false);
+
+// Actual project status from server props
+const serverStatus = computed(() => props.project.status);
+
+// Effective status: optimistic if set, otherwise server
+const effectiveStatus = computed<RunState>(() => {
+    if (optimisticState.value) return optimisticState.value;
+    return serverStatus.value as RunState;
+});
+
+const isRunning = computed(() => effectiveStatus.value === 'running');
+const isPaused = computed(() => effectiveStatus.value === 'paused');
+const isError = computed(() => effectiveStatus.value === 'error');
+const isStarting = computed(() => effectiveStatus.value === 'starting');
+const isPausing = computed(() => effectiveStatus.value === 'pausing');
+const isResuming = computed(() => effectiveStatus.value === 'resuming');
+const isStopping = computed(() => effectiveStatus.value === 'stopping');
+const hasActiveRun = computed(() =>
+    isRunning.value || isPaused.value || isError.value ||
+    isStarting.value || isPausing.value || isResuming.value || isStopping.value,
+);
+
+// Show Start when no run is active (idle, no_prd, error — not transitioning)
+const showStartButton = computed(() =>
+    !hasActiveRun.value && effectiveStatus.value !== 'starting',
+);
+
+// Show Pause when running (not transitioning)
+const showPauseButton = computed(() =>
+    isRunning.value || isPausing.value,
+);
+
+// Show Resume when paused (not transitioning)
+const showResumeButton = computed(() =>
+    isPaused.value || isResuming.value,
+);
+
+// Show Stop when running, paused, or error (not while already stopping)
+const showStopButton = computed(() =>
+    (isRunning.value || isPaused.value || isError.value ||
+     isStarting.value || isPausing.value || isResuming.value) && !isStopping.value,
+);
+
+// Controls are disabled when offline
+const controlsDisabled = computed(() => !isOnline.value);
 
 const stories = computed(() => props.project.story_details ?? []);
 
@@ -71,6 +128,116 @@ const progressPercentage = computed(() => {
     if (!props.project.stories_total) return 0;
     return Math.round((props.project.stories_completed / props.project.stories_total) * 100);
 });
+
+// Subscribe to chief messages on mount
+onMounted(() => {
+    subscribe();
+
+    // Listen for run lifecycle events from chief
+    on('run_progress', () => {
+        // Server confirmed run is progressing — clear optimistic state
+        optimisticState.value = null;
+    });
+
+    on('run_complete', () => {
+        optimisticState.value = null;
+    });
+
+    on('run_paused', () => {
+        optimisticState.value = null;
+    });
+
+    on('error', (message) => {
+        const payload = message.message as Record<string, unknown>;
+        // If we get an error related to run commands, rollback optimistic state
+        if (payload.code === 'ALREADY_RUNNING' || payload.code === 'NOT_RUNNING' || payload.code === 'ALREADY_PAUSED') {
+            // Graceful handling of duplicate commands — no error shown
+            optimisticState.value = null;
+        } else if (optimisticState.value) {
+            triggerShake();
+            optimisticState.value = null;
+        }
+    });
+});
+
+function triggerShake() {
+    shakeControl.value = true;
+    setTimeout(() => {
+        shakeControl.value = false;
+    }, 500);
+}
+
+// Clear optimistic state when server props change (Inertia re-render)
+let prevStatus = serverStatus.value;
+const statusWatchInterval = setInterval(() => {
+    if (serverStatus.value !== prevStatus) {
+        prevStatus = serverStatus.value;
+        optimisticState.value = null;
+    }
+}, 200);
+
+onUnmounted(() => {
+    clearInterval(statusWatchInterval);
+});
+
+async function handleStartRun() {
+    if (controlsDisabled.value) return;
+    optimisticState.value = 'starting';
+
+    const result = await sendCommand(props.deviceId, 'start_run', {
+        project_slug: props.projectSlug,
+    });
+
+    if (!result) {
+        // Command failed — rollback
+        triggerShake();
+        optimisticState.value = null;
+    }
+    // On success, wait for run_progress event to confirm
+}
+
+async function handlePauseRun() {
+    if (controlsDisabled.value) return;
+    optimisticState.value = 'pausing';
+
+    const result = await sendCommand(props.deviceId, 'pause_run', {
+        project_slug: props.projectSlug,
+    });
+
+    if (!result) {
+        triggerShake();
+        optimisticState.value = null;
+    }
+}
+
+async function handleResumeRun() {
+    if (controlsDisabled.value) return;
+    optimisticState.value = 'resuming';
+
+    const result = await sendCommand(props.deviceId, 'resume_run', {
+        project_slug: props.projectSlug,
+    });
+
+    if (!result) {
+        triggerShake();
+        optimisticState.value = null;
+    }
+}
+
+async function handleStopRun() {
+    showStopConfirm.value = false;
+    if (controlsDisabled.value) return;
+    optimisticState.value = 'stopping';
+
+    const result = await sendCommand(props.deviceId, 'stop_run', {
+        project_slug: props.projectSlug,
+    });
+
+    if (!result) {
+        triggerShake();
+        optimisticState.value = null;
+    }
+}
 
 function storyStatusIcon(status: string) {
     switch (status) {
@@ -114,7 +281,7 @@ function runStatusColor(status: string): string {
 }
 
 function formatDuration(seconds: number | null): string {
-    if (!seconds) return '—';
+    if (!seconds) return '\u2014';
     if (seconds < 60) return `${seconds}s`;
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes}m`;
@@ -124,7 +291,7 @@ function formatDuration(seconds: number | null): string {
 }
 
 function formatTokens(tokens: number | null): string {
-    if (!tokens) return '—';
+    if (!tokens) return '\u2014';
     if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
     if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(0)}K`;
     return tokens.toString();
@@ -156,6 +323,140 @@ function scrollToOutput() {
                 class="flex flex-col border-border lg:w-1/2 lg:border-r"
                 :class="{ 'lg:w-full': !hasActiveRun }"
             >
+                <!-- Run Control Bar -->
+                <div
+                    class="flex items-center gap-2 border-b border-border px-4 py-3"
+                    :class="{ 'shake': shakeControl }"
+                >
+                    <TooltipProvider>
+                        <!-- Start Run Button -->
+                        <Transition
+                            enter-active-class="transition-all duration-[var(--duration-standard)]"
+                            enter-from-class="opacity-0 scale-95"
+                            enter-to-class="opacity-100 scale-100"
+                            leave-active-class="transition-all duration-[var(--duration-micro)]"
+                            leave-from-class="opacity-100 scale-100"
+                            leave-to-class="opacity-0 scale-95"
+                        >
+                            <Tooltip v-if="showStartButton">
+                                <TooltipTrigger as-child>
+                                    <Button
+                                        :disabled="controlsDisabled || isStarting"
+                                        @click="handleStartRun"
+                                    >
+                                        <Loader2
+                                            v-if="isStarting"
+                                            class="animate-spin"
+                                        />
+                                        <Play v-else />
+                                        <span class="min-w-[5rem]">{{ isStarting ? 'Starting...' : 'Start Run' }}</span>
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent v-if="controlsDisabled">
+                                    Server offline
+                                </TooltipContent>
+                            </Tooltip>
+                        </Transition>
+
+                        <!-- Pause Button -->
+                        <Transition
+                            enter-active-class="transition-all duration-[var(--duration-standard)]"
+                            enter-from-class="opacity-0 scale-95"
+                            enter-to-class="opacity-100 scale-100"
+                            leave-active-class="transition-all duration-[var(--duration-micro)]"
+                            leave-from-class="opacity-100 scale-100"
+                            leave-to-class="opacity-0 scale-95"
+                        >
+                            <Tooltip v-if="showPauseButton">
+                                <TooltipTrigger as-child>
+                                    <Button
+                                        variant="secondary"
+                                        :disabled="controlsDisabled || isPausing"
+                                        @click="handlePauseRun"
+                                    >
+                                        <Loader2
+                                            v-if="isPausing"
+                                            class="animate-spin"
+                                        />
+                                        <Pause v-else />
+                                        <span>{{ isPausing ? 'Pausing...' : 'Pause' }}</span>
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent v-if="controlsDisabled">
+                                    Server offline
+                                </TooltipContent>
+                            </Tooltip>
+                        </Transition>
+
+                        <!-- Resume Button -->
+                        <Transition
+                            enter-active-class="transition-all duration-[var(--duration-standard)]"
+                            enter-from-class="opacity-0 scale-95"
+                            enter-to-class="opacity-100 scale-100"
+                            leave-active-class="transition-all duration-[var(--duration-micro)]"
+                            leave-from-class="opacity-100 scale-100"
+                            leave-to-class="opacity-0 scale-95"
+                        >
+                            <Tooltip v-if="showResumeButton">
+                                <TooltipTrigger as-child>
+                                    <Button
+                                        :disabled="controlsDisabled || isResuming"
+                                        @click="handleResumeRun"
+                                    >
+                                        <Loader2
+                                            v-if="isResuming"
+                                            class="animate-spin"
+                                        />
+                                        <Play v-else />
+                                        <span>{{ isResuming ? 'Resuming...' : 'Resume' }}</span>
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent v-if="controlsDisabled">
+                                    Server offline
+                                </TooltipContent>
+                            </Tooltip>
+                        </Transition>
+
+                        <!-- Stop Button -->
+                        <Transition
+                            enter-active-class="transition-all duration-[var(--duration-standard)]"
+                            enter-from-class="opacity-0 scale-95"
+                            enter-to-class="opacity-100 scale-100"
+                            leave-active-class="transition-all duration-[var(--duration-micro)]"
+                            leave-from-class="opacity-100 scale-100"
+                            leave-to-class="opacity-0 scale-95"
+                        >
+                            <Tooltip v-if="showStopButton">
+                                <TooltipTrigger as-child>
+                                    <Button
+                                        variant="destructive"
+                                        :disabled="controlsDisabled || isStopping"
+                                        @click="showStopConfirm = true"
+                                    >
+                                        <Loader2
+                                            v-if="isStopping"
+                                            class="animate-spin"
+                                        />
+                                        <Square v-else />
+                                        <span>{{ isStopping ? 'Stopping...' : 'Stop' }}</span>
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent v-if="controlsDisabled">
+                                    Server offline
+                                </TooltipContent>
+                            </Tooltip>
+                        </Transition>
+                    </TooltipProvider>
+
+                    <!-- PRD name indicator -->
+                    <span
+                        v-if="project.current_prd_name && hasActiveRun"
+                        class="ml-auto truncate text-xs text-muted-foreground"
+                    >
+                        {{ project.current_prd_name }}
+                    </span>
+                </div>
+
                 <!-- Progress bar spanning full width at top -->
                 <div
                     v-if="project.stories_total > 0"
@@ -375,5 +676,16 @@ function scrollToOutput() {
                 </div>
             </div>
         </div>
+
+        <!-- Stop Run Confirmation Dialog -->
+        <ConfirmDialog
+            v-model:open="showStopConfirm"
+            title="Stop this run?"
+            description="Progress will be saved but the current story will be abandoned."
+            confirm-label="Stop Run"
+            variant="destructive"
+            @confirm="handleStopRun"
+            @cancel="showStopConfirm = false"
+        />
     </ProjectLayout>
 </template>
