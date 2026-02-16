@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     Activity,
     CheckCircle2,
@@ -220,14 +220,22 @@ function navigateToActivityView(event: RecentActivity) {
                 class="flex-1"
             >
                 <template #action>
-                    <Button
-                        :disabled="serverNotLive"
-                        :title="serverNotLive ? 'Server offline' : undefined"
-                        @click="navigateToNewPrd"
-                    >
-                        <Plus class="size-4" />
-                        New PRD
-                    </Button>
+                    <div class="flex flex-col items-center gap-3">
+                        <Button
+                            :disabled="serverNotLive"
+                            :title="serverNotLive ? 'Server offline' : undefined"
+                            @click="navigateToNewPrd"
+                        >
+                            <Plus class="size-4" />
+                            New PRD
+                        </Button>
+                        <Link
+                            href="/docs/prds"
+                            class="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                        >
+                            Learn about PRDs
+                        </Link>
+                    </div>
                 </template>
             </EmptyState>
 

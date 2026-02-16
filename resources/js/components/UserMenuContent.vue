@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
-import { Keyboard, LogOut, Settings } from 'lucide-vue-next';
+import { Book, Keyboard, LogOut, Settings } from 'lucide-vue-next';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -39,6 +39,12 @@ defineProps<Props>();
             <Link class="block w-full cursor-pointer" :href="edit()" prefetch>
                 <Settings class="mr-2 h-4 w-4" />
                 Settings
+            </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem :as-child="true">
+            <Link class="block w-full cursor-pointer" href="/docs">
+                <Book class="mr-2 h-4 w-4" />
+                Documentation
             </Link>
         </DropdownMenuItem>
         <DropdownMenuItem @click="$emit('show-shortcuts')">

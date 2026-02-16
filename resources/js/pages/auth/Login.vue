@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { ref, onMounted } from 'vue';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
 import { Button } from '@/components/ui/button';
@@ -81,6 +81,13 @@ onMounted(() => {
                         {{ isLoading ? 'Redirecting...' : 'Sign in with GitHub' }}
                     </Button>
                 </div>
+
+                <Link
+                    href="/docs"
+                    class="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                >
+                    Documentation
+                </Link>
             </div>
         </div>
     </div>

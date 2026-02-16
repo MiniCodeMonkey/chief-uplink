@@ -124,6 +124,7 @@
 - `usePushNotifications` composable manages browser-side subscription/unsubscription with CSRF-authenticated fetch calls
 - Settings → Preferences page at `/settings/preferences` for push notification opt-in toggle
 - Event listeners registered in `AppServiceProvider::boot()` via `Event::listen()`
+- Documentation served at `/docs` (public) — `DocsController` reads markdown from `docs/` folder, renders via `docs/Show.vue` with markdown-it
 - CSRF token meta tag added to `app.blade.php` for fetch-based API calls
 - Email notifications use batching via Redis — `EmailNotificationService` accumulates events in `email:batch:{user_id}` for 5-minute window, then sends a single digest email
 - `NotificationDigest` Mailable does NOT implement `ShouldQueue` — the job (`SendEmailNotificationDigest`) is already queued, so double-queueing is unnecessary
@@ -138,6 +139,8 @@
 - `isInputFocused()`, `isModKey()`, `isMacPlatform()` exported from `useKeyboardShortcuts.ts` for reuse
 - `AppHeader` accepts `v-model:show-shortcuts` to externalize keyboard shortcuts overlay state to parent layout
 - `KeyboardShortcutsOverlay` no longer has its own Escape handler — parent layout composable handles closing
+- Onboarding detection: `showOnboarding` shared Inertia prop checks `DeviceAuthorization::where('user_id', ...)->exists()` — includes revoked devices so onboarding is only shown for truly new users
+- Dashboard `v-else-if` chain order: isLoading → showOnboarding && !hasDevices → !hasDevices → showNeverConnectedEmpty → no projects → project cards
 
 ---
 
@@ -1645,5 +1648,74 @@
   - KeyboardShortcutsOverlay should not have its own Escape handler when the parent manages open/close state — avoids double-firing
   - `defineModel` in Vue 3.4+ works well for v-model patterns between layout and header components
   - ESLint import/order rule requires composable imports to be alphabetically sorted within `@/composables/` group
+
+---
+
+## 2026-02-16 - US-045
+- What was implemented:
+  - First-login onboarding view that replaces dashboard for new users with no devices
+  - Welcome message with "Welcome to Chief" heading and brief explanation
+  - Step 1: Copyable `chief login` command with CopyButton component and note about ~/.chief/credentials.yaml
+  - Step 2: "Or deploy a cloud server" button linking to Cloud Deploy wizard
+  - Push notification opt-in prompt: "Want to get notified when runs complete?" with Enable/Not now buttons
+  - Animated "Waiting for connection..." indicator with pulsing StatusDot
+  - Live device connection detection via existing `useDeviceStatus` composable — celebration animation on connect then auto-reload
+  - Onboarding skipped for returning users (checks if user has ever had any DeviceAuthorization, including revoked)
+  - `showOnboarding` lazy prop shared via HandleInertiaRequests middleware
+  - Clean, minimal design with staggered card entrance animations and reduced motion support
+- Files changed:
+  - app/Http/Middleware/HandleInertiaRequests.php (added showOnboarding prop and shouldShowOnboarding method)
+  - resources/js/components/Onboarding.vue (new)
+  - resources/js/pages/Dashboard.vue (integrated Onboarding component, added showOnboarding computed)
+  - tests/Feature/Dashboard/OnboardingTest.php (new — 4 tests)
+  - .chief/prds/main/prd.json (US-045 passes: true)
+- **Learnings for future iterations:**
+  - `showOnboarding` uses `DeviceAuthorization::where(...)->exists()` (includes revoked) — not just active non-revoked devices
+  - Onboarding component watches shared `devices` Inertia prop via `usePage()` — no separate WebSocket listener needed since `useDeviceStatus` in AppLayout already reloads `devices` on connection events
+  - Dashboard's `v-else-if` chain: isLoading → showOnboarding → !hasDevices → showNeverConnectedEmpty → no projects → project cards
+  - Pre-existing parallel test flakiness in EmailNotificationTest — not related to new changes, passes in sequential mode
+
+---
+
+## 2026-02-16 - US-046
+- What was implemented:
+  - Embedded documentation system served at /docs (public, no auth required)
+  - 8 documentation pages: Getting Started, PRDs, Runs, Viewing Diffs, Remote Monitoring, Configuration, Cloud Deployment, Self-Hosting
+  - DocsController with index and show methods reading markdown files from docs/ folder
+  - Documentation page (docs/Show.vue) with sidebar navigation, markdown rendering, client-side search, and previous/next pagination
+  - Markdown rendered with markdown-it matching the app's design system (same pattern as PrdPreviewPanel)
+  - Navigation sidebar with section icons, responsive for mobile (slide-out overlay) and desktop (fixed sidebar)
+  - Client-side full-text search across all doc pages (lazy-loaded search index via Inertia JSON requests)
+  - Search results show title + contextual excerpt with match highlighting
+  - Top bar with Chief logo, "Docs" label, and Sign in / Dashboard link based on auth state
+  - Previous / Next navigation links at the bottom of each page
+  - Docs link added to user avatar dropdown menu (UserMenuContent)
+  - Docs links added to empty states: Dashboard (no devices, never connected), Onboarding (waiting indicator), Login page, Overview (no PRD)
+  - Comprehensive test suite (6 tests): index page, specific doc page, 404 for non-existent pages, public access, section count, content for all sections
+  - All 494 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - docs/getting-started.md (new)
+  - docs/prds.md (new)
+  - docs/runs.md (new)
+  - docs/diffs.md (new)
+  - docs/remote-monitoring.md (new)
+  - docs/configuration.md (new)
+  - docs/cloud-deployment.md (new)
+  - docs/self-hosting.md (new)
+  - app/Http/Controllers/DocsController.php (new)
+  - routes/web.php (added public docs routes)
+  - resources/js/pages/docs/Show.vue (new: full docs page with sidebar, search, markdown rendering)
+  - resources/js/components/UserMenuContent.vue (added Documentation link)
+  - resources/js/components/Onboarding.vue (added docs link in waiting indicator)
+  - resources/js/pages/auth/Login.vue (added docs link below sign-in card)
+  - resources/js/pages/Dashboard.vue (added docs links in empty states)
+  - resources/js/pages/projects/Overview.vue (added docs link in no-PRD empty state)
+  - tests/Feature/DocsTest.php (new: 6 tests)
+  - .chief/prds/main/prd.json (US-046 passes: true)
+- **Learnings for future iterations:**
+  - Docs pages are public (no auth middleware) but still go through the web middleware group, so HandleInertiaRequests runs and `auth.user` is null for unauthenticated users
+  - Client-side search index is lazy-loaded on search input focus via fetch with X-Inertia headers to get JSON responses from other doc pages
+  - ESLint errors in `resources/js/actions/` are from auto-generated gitignored files — always pre-existing and harmless
+  - The docs pages reuse the same markdown CSS pattern as PrdPreviewPanel but with its own scoped styles for consistency
 
 ---

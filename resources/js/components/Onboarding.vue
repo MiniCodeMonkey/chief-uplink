@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { router, usePage } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import {
     Bell,
     Check,
@@ -248,6 +248,12 @@ function dismissNotifications() {
                 <p class="text-xs text-muted-foreground/60">
                     This page updates automatically when a device connects.
                 </p>
+                <Link
+                    href="/docs/getting-started"
+                    class="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                >
+                    Read the documentation
+                </Link>
             </div>
         </div>
     </div>

@@ -881,8 +881,8 @@
         "Clean, minimal design — not overwhelming for a first-time user"
       ],
       "priority": 45,
-      "passes": false,
-      "inProgress": true
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-046",
@@ -899,7 +899,8 @@
         "Docs are viewable without authentication (public)"
       ],
       "priority": 46,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-047",

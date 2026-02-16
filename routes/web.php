@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\MessageBufferController;
 use App\Http\Controllers\Auth\DeviceCodeEntryController;
 use App\Http\Controllers\Auth\EmailCaptureController;
 use App\Http\Controllers\Auth\GitHubAuthController;
+use App\Http\Controllers\DocsController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\Settings\EmailUnsubscribeController;
 use App\Http\Middleware\EnsureEmailProvided;
@@ -61,6 +62,10 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
         ->middleware('throttle:browser-commands')
         ->name('ws.command.send');
 });
+
+// Documentation (public, no auth required)
+Route::get('docs', [DocsController::class, 'index'])->name('docs.index');
+Route::get('docs/{slug}', [DocsController::class, 'show'])->name('docs.show');
 
 // Email unsubscribe (signed URL, no auth required)
 Route::get('email/unsubscribe/{user}', EmailUnsubscribeController::class)->name('email-unsubscribe');
