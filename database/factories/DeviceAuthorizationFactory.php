@@ -28,6 +28,8 @@ class DeviceAuthorizationFactory extends Factory
             'last_connected_at' => fake()->dateTimeBetween('-7 days', 'now'),
             'is_online' => false,
             'revoked_at' => null,
+            'last_heartbeat_at' => null,
+            'session_id' => null,
         ];
     }
 
@@ -36,6 +38,8 @@ class DeviceAuthorizationFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'is_online' => true,
             'last_connected_at' => now(),
+            'last_heartbeat_at' => now(),
+            'session_id' => fake()->uuid(),
         ]);
     }
 

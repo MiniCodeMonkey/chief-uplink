@@ -23,6 +23,8 @@ class DeviceAuthorization extends Model
         'previous_refresh_token_hash',
         'last_ip',
         'last_connected_at',
+        'last_heartbeat_at',
+        'session_id',
         'is_online',
         'revoked_at',
     ];
@@ -32,6 +34,7 @@ class DeviceAuthorization extends Model
         return [
             'is_online' => 'boolean',
             'last_connected_at' => 'datetime',
+            'last_heartbeat_at' => 'datetime',
             'revoked_at' => 'datetime',
         ];
     }
