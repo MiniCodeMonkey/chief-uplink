@@ -57,6 +57,7 @@ const selectedDeviceProjects = computed(() => {
     <div class="flex items-center gap-1">
         <Link
             href="/"
+            prefetch
             class="focus-ring flex shrink-0 items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors duration-[var(--duration-micro)] hover:bg-accent"
             aria-label="Chief home"
         >

@@ -263,7 +263,7 @@ watch(isOnline, (online, wasOnline) => {
                     <!-- Settings form -->
                     <form
                         v-else
-                        class="space-y-6"
+                        class="content-reveal space-y-6"
                         @submit.prevent="saveSettings"
                     >
                         <!-- Offline notice when form is shown with cached data -->

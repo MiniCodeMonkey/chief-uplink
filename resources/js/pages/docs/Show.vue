@@ -294,6 +294,7 @@ onBeforeUnmount(() => {
                             v-for="section in sections"
                             :key="section.slug"
                             :href="`/docs/${section.slug}`"
+                            prefetch
                             :class="[
                                 'flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors',
                                 section.slug === slug
@@ -321,6 +322,7 @@ onBeforeUnmount(() => {
                     <Link
                         v-if="prevSection"
                         :href="`/docs/${prevSection.slug}`"
+                        prefetch
                         class="group flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
                     >
                         <ArrowLeft class="size-4 transition-transform group-hover:-translate-x-0.5" />
@@ -331,6 +333,7 @@ onBeforeUnmount(() => {
                     <Link
                         v-if="nextSection"
                         :href="`/docs/${nextSection.slug}`"
+                        prefetch
                         class="group flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
                     >
                         {{ nextSection.title }}

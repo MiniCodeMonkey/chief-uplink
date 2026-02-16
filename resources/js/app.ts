@@ -22,6 +22,8 @@ createInertiaApp({
     },
     progress: {
         color: '#D97706',
+        showSpinner: false,
+        delay: 100,
     },
 });
 

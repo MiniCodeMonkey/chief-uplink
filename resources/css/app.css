@@ -319,6 +319,46 @@
     }
 }
 
+/* Inertia progress bar — thin accent-colored line at top of page */
+#nprogress {
+    pointer-events: none;
+}
+#nprogress .bar {
+    background: var(--primary);
+    position: fixed;
+    z-index: 100;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+}
+#nprogress .peg {
+    display: block;
+    position: absolute;
+    right: 0;
+    width: 100px;
+    height: 100%;
+    box-shadow: 0 0 10px var(--primary), 0 0 5px var(--primary);
+    opacity: 1;
+    transform: rotate(3deg) translate(0px, -4px);
+}
+
+/* Content reveal animation — used when skeleton transitions to real content */
+.content-reveal {
+    animation: content-reveal var(--duration-standard) var(--ease-gentle) both;
+}
+
+@keyframes content-reveal {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
     *,

@@ -141,6 +141,10 @@ function navigateToProject(slug: string) {
     router.visit(`/projects/${slug}`);
 }
 
+function prefetchProject(slug: string) {
+    router.prefetch(`/projects/${slug}`);
+}
+
 function lastActivityTime(project: ProjectSummary): string | null {
     if (!project.recent_activity || project.recent_activity.length === 0) {
         return null;
@@ -426,6 +430,7 @@ const isLoading = computed(() => page.props.devices === undefined);
                     :aria-label="`${project.project_name} — ${statusLabel(project.status)}`"
                     @click="navigateToProject(project.project_slug)"
                     @keydown.enter="navigateToProject(project.project_slug)"
+                    @mouseenter="prefetchProject(project.project_slug)"
                     @touchstart="
                         handleLongPressStart(
                             project.project_slug,

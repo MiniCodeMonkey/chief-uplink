@@ -80,6 +80,7 @@ function handleOverflowBackdropClick() {
                 v-for="tab in allTabs"
                 :key="tab.slug"
                 :href="tab.href"
+                prefetch
                 class="focus-ring relative flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors duration-[var(--duration-micro)] hover:text-foreground"
                 :class="
                     isActive(tab.href)
@@ -109,6 +110,7 @@ function handleOverflowBackdropClick() {
                 v-for="tab in primaryTabs"
                 :key="tab.slug"
                 :href="tab.href"
+                prefetch
                 class="focus-ring flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition-colors duration-[var(--duration-micro)]"
                 :class="
                     isActive(tab.href)
