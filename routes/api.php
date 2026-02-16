@@ -76,4 +76,6 @@ Route::prefix('device')->middleware(['device.api'])->group(function () {
         ->name('device.disconnect');
     Route::post('/messages', [\App\Http\Controllers\Api\MessageIngestionController::class, 'ingest'])
         ->name('device.messages');
+    Route::post('/broadcasting/auth', [\App\Http\Controllers\Api\DeviceBroadcastAuthController::class, 'authenticate'])
+        ->name('device.broadcasting.auth');
 });
