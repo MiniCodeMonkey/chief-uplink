@@ -15,6 +15,7 @@ import {
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import CloneRepositoryModal from '@/components/CloneRepositoryModal.vue';
+import CreateProjectModal from '@/components/CreateProjectModal.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -22,7 +23,10 @@ import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusDot } from '@/components/ui/status-dot';
 import { useCommandRelay } from '@/composables/useCommandRelay';
-import { formatRelativeTime, useConnectionStatus } from '@/composables/useConnectionStatus';
+import {
+    formatRelativeTime,
+    useConnectionStatus,
+} from '@/composables/useConnectionStatus';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { DeviceSummary, ProjectSummary } from '@/types';
 
@@ -32,10 +36,12 @@ interface DeviceWithProjects extends DeviceSummary {
 
 const page = usePage();
 const { sendCommand } = useCommandRelay();
-const { isOnline, isOffline, isNeverConnected, selectedDevice, statusText } = useConnectionStatus();
+const { isOnline, isOffline, isNeverConnected, selectedDevice, statusText } =
+    useConnectionStatus();
 
 const newMenuOpen = ref(false);
 const cloneModalOpen = ref(false);
+const createProjectModalOpen = ref(false);
 const longPressTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const longPressProjectSlug = ref<string | null>(null);
 const offlineBannerDismissed = ref(false);
@@ -61,6 +67,10 @@ const projects = computed(() => currentDevice.value?.projects ?? []);
 
 const hasDevices = computed(() => devices.value.length > 0);
 
+const existingProjectNames = computed(() =>
+    projects.value.map((p) => p.project_name),
+);
+
 // Server is not live (offline, reconnecting, or never connected)
 const serverNotLive = computed(() => !isOnline.value);
 
@@ -79,7 +89,10 @@ const offlineBannerText = computed(() => {
 
 // Show never-connected empty state when device exists but never connected and has no projects
 const showNeverConnectedEmpty = computed(
-    () => hasDevices.value && isNeverConnected.value && projects.value.length === 0,
+    () =>
+        hasDevices.value &&
+        isNeverConnected.value &&
+        projects.value.length === 0,
 );
 
 function dismissOfflineBanner() {
@@ -252,14 +265,21 @@ const isLoading = computed(() => page.props.devices === undefined);
                     >
                         <div
                             v-if="newMenuOpen"
-                            class="absolute right-0 top-full z-50 mt-1 min-w-[200px] overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-md"
+                            class="absolute top-full right-0 z-50 mt-1 min-w-[200px] overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-md"
                         >
                             <button
                                 class="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors duration-[var(--duration-micro)] hover:bg-accent"
                                 :disabled="!isOnline"
-                                :class="{ 'opacity-50 cursor-not-allowed': !isOnline }"
-                                :title="!isOnline ? 'Server offline' : undefined"
-                                @click="newMenuOpen = false; cloneModalOpen = true"
+                                :class="{
+                                    'cursor-not-allowed opacity-50': !isOnline,
+                                }"
+                                :title="
+                                    !isOnline ? 'Server offline' : undefined
+                                "
+                                @click="
+                                    newMenuOpen = false;
+                                    cloneModalOpen = true;
+                                "
                             >
                                 <GitFork class="size-4 text-muted-foreground" />
                                 Clone Repository
@@ -267,11 +287,20 @@ const isLoading = computed(() => page.props.devices === undefined);
                             <button
                                 class="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors duration-[var(--duration-micro)] hover:bg-accent"
                                 :disabled="!isOnline"
-                                :class="{ 'opacity-50 cursor-not-allowed': !isOnline }"
-                                :title="!isOnline ? 'Server offline' : undefined"
-                                @click="newMenuOpen = false"
+                                :class="{
+                                    'cursor-not-allowed opacity-50': !isOnline,
+                                }"
+                                :title="
+                                    !isOnline ? 'Server offline' : undefined
+                                "
+                                @click="
+                                    newMenuOpen = false;
+                                    createProjectModalOpen = true;
+                                "
                             >
-                                <FolderPlus class="size-4 text-muted-foreground" />
+                                <FolderPlus
+                                    class="size-4 text-muted-foreground"
+                                />
                                 New Project
                             </button>
                         </div>
@@ -321,7 +350,9 @@ const isLoading = computed(() => page.props.devices === undefined);
                 class="flex-1"
             >
                 <template #action>
-                    <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div
+                        class="flex items-center gap-2 text-xs text-muted-foreground"
+                    >
                         <StatusDot state="never-connected" class="size-2" />
                         <span>{{ statusText }}</span>
                     </div>
@@ -340,6 +371,7 @@ const isLoading = computed(() => page.props.devices === undefined);
                     <Button
                         :disabled="!isOnline"
                         :title="!isOnline ? 'Server offline' : undefined"
+                        @click="createProjectModalOpen = true"
                     >
                         <Plus class="size-4" />
                         New Project
@@ -348,14 +380,11 @@ const isLoading = computed(() => page.props.devices === undefined);
             </EmptyState>
 
             <!-- Project cards grid -->
-            <div
-                v-else
-                class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-            >
+            <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div
                     v-for="(project, index) in projects"
                     :key="project.id"
-                    class="project-card group relative cursor-pointer rounded-lg border border-border bg-card p-5 transition-all duration-[var(--duration-standard)] ease-[var(--ease-snappy)] hover:border-foreground/20 hover:-translate-y-px active:scale-[0.98]"
+                    class="project-card group relative cursor-pointer rounded-lg border border-border bg-card p-5 transition-all duration-[var(--duration-standard)] ease-[var(--ease-snappy)] hover:-translate-y-px hover:border-foreground/20 active:scale-[0.98]"
                     :class="{ 'opacity-70': serverNotLive }"
                     :style="{ animationDelay: `${index * 50}ms` }"
                     role="link"
@@ -363,14 +392,23 @@ const isLoading = computed(() => page.props.devices === undefined);
                     :aria-label="`${project.project_name} — ${statusLabel(project.status)}`"
                     @click="navigateToProject(project.project_slug)"
                     @keydown.enter="navigateToProject(project.project_slug)"
-                    @touchstart="handleLongPressStart(project.project_slug, project.status)"
+                    @touchstart="
+                        handleLongPressStart(
+                            project.project_slug,
+                            project.status,
+                        )
+                    "
                     @touchend="handleLongPressEnd"
                     @touchcancel="handleLongPressEnd"
                 >
                     <!-- Desktop hover action buttons (hidden when offline) -->
                     <div
-                        v-if="project.status === 'running' && currentDevice && isOnline"
-                        class="absolute right-3 top-3 z-10 flex gap-1 opacity-0 transition-opacity duration-[var(--duration-standard)] group-hover:opacity-100"
+                        v-if="
+                            project.status === 'running' &&
+                            currentDevice &&
+                            isOnline
+                        "
+                        class="absolute top-3 right-3 z-10 flex gap-1 opacity-0 transition-opacity duration-[var(--duration-standard)] group-hover:opacity-100"
                     >
                         <button
                             class="focus-ring flex size-7 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -391,16 +429,18 @@ const isLoading = computed(() => page.props.devices === undefined);
                     <!-- Mobile long-press hint (... icon) — hidden when offline -->
                     <div
                         v-if="project.status === 'running' && isOnline"
-                        class="absolute right-3 top-3 z-10 flex lg:hidden group-hover:hidden"
+                        class="absolute top-3 right-3 z-10 flex group-hover:hidden lg:hidden"
                     >
-                        <MoreHorizontal class="size-4 text-muted-foreground/40" />
+                        <MoreHorizontal
+                            class="size-4 text-muted-foreground/40"
+                        />
                     </div>
 
                     <!-- Card content -->
                     <div class="flex flex-col gap-3">
                         <!-- Header: name + status -->
                         <div class="flex items-start justify-between gap-2">
-                            <h3 class="font-medium leading-snug">
+                            <h3 class="leading-snug font-medium">
                                 {{ project.project_name }}
                             </h3>
                             <Badge
@@ -414,16 +454,16 @@ const isLoading = computed(() => page.props.devices === undefined);
 
                         <!-- PRD name + story progress (running projects) -->
                         <div
-                            v-if="project.status === 'running' && project.current_prd_name"
+                            v-if="
+                                project.status === 'running' &&
+                                project.current_prd_name
+                            "
                             class="space-y-2"
                         >
                             <p class="text-xs text-muted-foreground">
                                 {{ project.current_prd_name }}
                             </p>
-                            <div
-                                v-if="project.stories_total"
-                                class="space-y-1"
-                            >
+                            <div v-if="project.stories_total" class="space-y-1">
                                 <ProgressBar
                                     :value="project.stories_completed ?? 0"
                                     :max="project.stories_total"
@@ -431,24 +471,37 @@ const isLoading = computed(() => page.props.devices === undefined);
                                     indicator-class="transition-all duration-500"
                                 />
                                 <p class="text-[11px] text-muted-foreground">
-                                    {{ project.stories_completed ?? 0 }}/{{ project.stories_total }} stories
+                                    {{ project.stories_completed ?? 0 }}/{{
+                                        project.stories_total
+                                    }}
+                                    stories
                                 </p>
                             </div>
                         </div>
 
                         <!-- Active sessions badge -->
                         <div
-                            v-if="project.active_sessions && project.active_sessions > 0"
+                            v-if="
+                                project.active_sessions &&
+                                project.active_sessions > 0
+                            "
                             class="flex items-center gap-1.5"
                         >
                             <MessageSquare class="size-3 text-primary" />
                             <span class="text-[11px] text-primary">
-                                {{ project.active_sessions }} active {{ project.active_sessions === 1 ? 'session' : 'sessions' }}
+                                {{ project.active_sessions }} active
+                                {{
+                                    project.active_sessions === 1
+                                        ? 'session'
+                                        : 'sessions'
+                                }}
                             </span>
                         </div>
 
                         <!-- Footer: branch + last activity -->
-                        <div class="flex items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
+                        <div
+                            class="flex items-center justify-between gap-2 pt-1 text-xs text-muted-foreground"
+                        >
                             <span
                                 v-if="project.git_branch"
                                 class="flex items-center gap-1 truncate font-mono"
@@ -476,7 +529,9 @@ const isLoading = computed(() => page.props.devices === undefined);
                     @click="closeLongPressMenu"
                 >
                     <div class="fixed inset-0 bg-black/20" />
-                    <div class="fixed inset-x-4 bottom-4 z-50 overflow-hidden rounded-xl border border-border bg-popover shadow-lg safe-area-bottom">
+                    <div
+                        class="safe-area-bottom fixed inset-x-4 bottom-4 z-50 overflow-hidden rounded-xl border border-border bg-popover shadow-lg"
+                    >
                         <div class="flex flex-col p-1">
                             <button
                                 class="flex items-center gap-3 rounded-lg px-4 py-3 text-left text-sm transition-colors hover:bg-accent"
@@ -504,6 +559,15 @@ const isLoading = computed(() => page.props.devices === undefined);
             v-model:open="cloneModalOpen"
             :device-id="currentDevice.id"
             :is-online="isOnline"
+        />
+
+        <!-- Create Project Modal -->
+        <CreateProjectModal
+            v-if="currentDevice"
+            v-model:open="createProjectModalOpen"
+            :device-id="currentDevice.id"
+            :is-online="isOnline"
+            :existing-project-names="existingProjectNames"
         />
     </AppLayout>
 </template>
