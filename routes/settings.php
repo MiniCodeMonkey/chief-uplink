@@ -53,4 +53,7 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
 
     // Notification preferences
     Route::patch('settings/notification-preferences', [NotificationPreferenceController::class, 'update'])->name('notification-preferences.update');
+
+    // Theme preference
+    Route::patch('settings/theme-preference', [NotificationPreferenceController::class, 'updateTheme'])->name('theme-preference.update');
 });

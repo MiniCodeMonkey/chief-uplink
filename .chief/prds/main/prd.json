@@ -1022,7 +1022,8 @@
         "Theme-aware accent color: amber-gold works in both modes (slightly adjusted shades if needed for contrast)"
       ],
       "priority": 52,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-053",

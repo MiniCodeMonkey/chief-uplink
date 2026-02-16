@@ -125,7 +125,7 @@ const memberSince = new Date(user.created_at).toLocaleDateString(undefined, {
                         >
                             <p
                                 v-show="recentlySuccessful"
-                                class="text-sm text-neutral-600"
+                                class="text-sm text-muted-foreground"
                             >
                                 Saved.
                             </p>

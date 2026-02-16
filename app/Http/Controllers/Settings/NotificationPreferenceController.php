@@ -22,4 +22,17 @@ class NotificationPreferenceController extends Controller
 
         return response()->json(['success' => true]);
     }
+
+    public function updateTheme(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'theme' => ['required', 'string', 'in:light,dark,system'],
+        ]);
+
+        $user = $request->user();
+        $user->theme_preference = $validated['theme'];
+        $user->save();
+
+        return response()->json(['success' => true]);
+    }
 }

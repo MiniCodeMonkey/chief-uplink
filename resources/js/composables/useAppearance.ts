@@ -85,6 +85,24 @@ export function initializeTheme(): void {
 
 const appearance = ref<Appearance>('system');
 
+function syncThemeToServer(value: Appearance): void {
+    const csrfToken = document
+        .querySelector('meta[name="csrf-token"]')
+        ?.getAttribute('content');
+
+    fetch('/settings/theme-preference', {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken || '',
+            Accept: 'application/json',
+        },
+        body: JSON.stringify({ theme: value }),
+    }).catch(() => {
+        // Silently ignore — localStorage/cookie are the primary stores
+    });
+}
+
 export function useAppearance(): UseAppearanceReturn {
     onMounted(() => {
         const savedAppearance = localStorage.getItem(
@@ -112,6 +130,9 @@ export function useAppearance(): UseAppearanceReturn {
 
         // Store in cookie for SSR...
         setCookie('appearance', value);
+
+        // Sync to server for cross-device consistency...
+        syncThemeToServer(value);
 
         updateTheme(value);
     }

@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Theme persistence: localStorage (instant) + cookie (SSR) + `users.theme_preference` DB column (cross-device) — `useAppearance` composable syncs all three
 - Laravel 12 + Vue 3 starter kit uses Inertia.js for SPA-like navigation
 - Tests use SQLite in-memory (`:memory:`) — configured in phpunit.xml
 - Frontend build (`npm run build`) is required before Pest tests that render Inertia pages (Vite manifest)
@@ -1876,4 +1877,42 @@
   - `dismissedDeviceIds` uses module-scoped `ref(new Set())` for session-scoped state (persists across navigation, resets on page reload)
   - `isVersionCompatible()` is exported as a standalone function (not just from composable) for use in non-composable contexts like template helpers
   - `DeviceStatusBanner` pattern (Transition + conditional + role="status") is the established pattern for layout-level banners
+---
+
+## 2026-02-16 - US-052
+- What was implemented:
+  - Theme toggle (Dark/Light/System) added to Settings → Preferences page, replacing the separate Appearance page in sidebar navigation
+  - Server-side theme persistence via `theme_preference` column on users table for cross-device consistency
+  - `useAppearance` composable updated to sync theme to server via PATCH `/settings/theme-preference`
+  - `HandleAppearance` middleware updated to read user's DB preference as fallback when cookie is not set
+  - Light mode styling audit and fixes across multiple components (using design system semantic colors instead of hardcoded neutrals)
+  - Theme still defaults to "System" (follows OS preference)
+  - localStorage + cookie provide instant application (no flash of wrong theme)
+  - CSS variable swap is instant (no animation between themes)
+  - Diff viewer already handles both modes via `d2h-dark-color-scheme`/`d2h-light-color-scheme` classes with MutationObserver
+  - Amber-gold accent color has proper light/dark variants defined in CSS variables
+- Files changed:
+  - database/migrations/2026_02_16_040859_add_theme_preference_to_users_table.php (new)
+  - app/Models/User.php (added theme_preference to fillable)
+  - app/Http/Controllers/Settings/NotificationPreferenceController.php (added updateTheme method)
+  - app/Http/Middleware/HandleAppearance.php (read user DB preference as fallback)
+  - routes/settings.php (added theme-preference.update route)
+  - resources/js/composables/useAppearance.ts (added syncThemeToServer)
+  - resources/js/pages/settings/Preferences.vue (added AppearanceTabs theme section)
+  - resources/js/layouts/settings/Layout.vue (removed Appearance from sidebar nav)
+  - resources/js/components/AppLogo.vue (use text-sidebar-primary-foreground)
+  - resources/js/components/AppearanceTabs.vue (added dark hover text color)
+  - resources/js/components/NavFooter.vue (use text-muted-foreground/text-foreground)
+  - resources/js/components/UserInfo.vue (use text-foreground)
+  - resources/js/layouts/auth/AuthSimpleLayout.vue (use text-foreground)
+  - resources/js/layouts/auth/AuthCardLayout.vue (use text-foreground)
+  - resources/js/pages/settings/Profile.vue (use text-muted-foreground)
+  - .chief/prds/main/prd.json (updated story status)
+- **Learnings for future iterations:**
+  - Theme persistence uses 3 layers: localStorage (instant client-side), cookie (SSR rendering), DB column (cross-device sync)
+  - `HandleAppearance` middleware reads cookie first (set client-side), falls back to user's DB preference — cookie wins for instant application
+  - When using hardcoded colors (neutral-*, black, white), always ensure both light and dark mode have appropriate values or use semantic design system colors (foreground, muted-foreground, etc.)
+  - AuthSplitLayout's dark panel (`bg-zinc-900`, `text-white`) is intentionally always dark — decorative elements don't need to switch themes
+  - The `@custom-variant dark (&:is(.dark *))` in Tailwind CSS 4 means `.dark` class toggles on `<html>` element
+  - diff2html has built-in `d2h-dark-color-scheme` / `d2h-light-color-scheme` classes — DiffFileViewer uses MutationObserver to detect dark mode changes
 ---
