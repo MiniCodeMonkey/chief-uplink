@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\DeviceCodeEntryController;
 use App\Http\Controllers\Auth\EmailCaptureController;
 use App\Http\Controllers\Auth\GitHubAuthController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\Settings\EmailUnsubscribeController;
 use App\Http\Middleware\EnsureEmailProvided;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -60,6 +61,9 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
         ->middleware('throttle:browser-commands')
         ->name('ws.command.send');
 });
+
+// Email unsubscribe (signed URL, no auth required)
+Route::get('email/unsubscribe/{user}', EmailUnsubscribeController::class)->name('email-unsubscribe');
 
 require __DIR__.'/settings.php';
 

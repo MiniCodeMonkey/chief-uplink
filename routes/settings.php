@@ -3,6 +3,7 @@
 use App\Http\Controllers\Settings\CloudDeployController;
 use App\Http\Controllers\Settings\CloudProviderKeyController;
 use App\Http\Controllers\Settings\DeviceController;
+use App\Http\Controllers\Settings\NotificationPreferenceController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\PushSubscriptionController;
 use App\Http\Middleware\EnsureEmailProvided;
@@ -49,4 +50,7 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
     // Push notification subscriptions
     Route::post('settings/push-subscription', [PushSubscriptionController::class, 'store'])->name('push-subscription.store');
     Route::delete('settings/push-subscription', [PushSubscriptionController::class, 'destroy'])->name('push-subscription.destroy');
+
+    // Notification preferences
+    Route::patch('settings/notification-preferences', [NotificationPreferenceController::class, 'update'])->name('notification-preferences.update');
 });

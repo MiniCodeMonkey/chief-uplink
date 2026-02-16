@@ -4,7 +4,9 @@ namespace App\Providers;
 
 use App\Events\ChiefMessageReceived;
 use App\Events\DeviceDisconnected;
+use App\Listeners\ScheduleOfflineEmailNotification;
 use App\Listeners\ScheduleOfflinePushNotification;
+use App\Listeners\SendEmailForChiefMessage;
 use App\Listeners\SendPushForChiefMessage;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -30,12 +32,19 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->registerPushNotificationListeners();
+        $this->registerEmailNotificationListeners();
     }
 
     protected function registerPushNotificationListeners(): void
     {
         Event::listen(ChiefMessageReceived::class, SendPushForChiefMessage::class);
         Event::listen(DeviceDisconnected::class, ScheduleOfflinePushNotification::class);
+    }
+
+    protected function registerEmailNotificationListeners(): void
+    {
+        Event::listen(ChiefMessageReceived::class, SendEmailForChiefMessage::class);
+        Event::listen(DeviceDisconnected::class, ScheduleOfflineEmailNotification::class);
     }
 
     /**

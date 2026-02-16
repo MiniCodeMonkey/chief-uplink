@@ -800,7 +800,8 @@
         "Rate limit: max 10 emails per user per day"
       ],
       "priority": 41,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-042",
