@@ -5,6 +5,7 @@ import {
     FolderPlus,
     GitBranch,
     GitFork,
+    Loader2,
     MessageSquare,
     Monitor,
     MoreHorizontal,
@@ -14,7 +15,7 @@ import {
     Square,
     X,
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import CloneRepositoryModal from '@/components/CloneRepositoryModal.vue';
 import CreateProjectModal from '@/components/CreateProjectModal.vue';
 import Onboarding from '@/components/Onboarding.vue';
@@ -29,6 +30,8 @@ import {
     formatRelativeTime,
     useConnectionStatus,
 } from '@/composables/useConnectionStatus';
+import { useLongPressHint } from '@/composables/useLongPressHint';
+import { usePullToRefresh } from '@/composables/usePullToRefresh';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { DeviceSummary, ProjectSummary } from '@/types';
 
@@ -40,6 +43,9 @@ const page = usePage();
 const { sendCommand } = useCommandRelay();
 const { isOnline, isOffline, isNeverConnected, selectedDevice, statusText } =
     useConnectionStatus();
+const { showHint: showLongPressHint, incrementVisitCount, markFeatureUsed } =
+    useLongPressHint();
+const { isRefreshing, pullDistance } = usePullToRefresh();
 
 const newMenuOpen = ref(false);
 const cloneModalOpen = ref(false);
@@ -47,6 +53,10 @@ const createProjectModalOpen = ref(false);
 const longPressTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const longPressProjectSlug = ref<string | null>(null);
 const offlineBannerDismissed = ref(false);
+
+onMounted(() => {
+    incrementVisitCount();
+});
 
 const devices = computed(
     () => (page.props.devices as DeviceWithProjects[]) || [],
@@ -170,6 +180,7 @@ function handleLongPressStart(slug: string, status: string) {
     if (!isOnline.value || status !== 'running') return;
     longPressTimer.value = setTimeout(() => {
         longPressProjectSlug.value = slug;
+        markFeatureUsed();
     }, 500);
 }
 
@@ -207,6 +218,30 @@ const isLoading = computed(() => page.props.devices === undefined);
 
     <AppLayout>
         <div class="flex h-full flex-1 flex-col gap-4 p-4">
+            <!-- Pull-to-refresh indicator -->
+            <Transition
+                enter-active-class="transition duration-[var(--duration-standard)] ease-[var(--ease-gentle)]"
+                enter-from-class="opacity-0"
+                enter-to-class="opacity-100"
+                leave-active-class="transition duration-[var(--duration-standard)] ease-[var(--ease-gentle)]"
+                leave-from-class="opacity-100"
+                leave-to-class="opacity-0"
+            >
+                <div
+                    v-if="pullDistance > 0 || isRefreshing"
+                    class="flex items-center justify-center py-2 text-sm text-muted-foreground"
+                    :style="{ transform: `translateY(${Math.max(0, pullDistance - 20)}px)` }"
+                >
+                    <Loader2
+                        class="mr-2 size-4"
+                        :class="{ 'animate-spin': isRefreshing }"
+                    />
+                    <span v-if="isRefreshing">Refreshing...</span>
+                    <span v-else-if="pullDistance >= 80">Release to refresh</span>
+                    <span v-else>Pull to refresh</span>
+                </div>
+            </Transition>
+
             <!-- Offline banner -->
             <Transition
                 enter-active-class="transition duration-[var(--duration-standard)] ease-[var(--ease-gentle)]"
@@ -225,7 +260,7 @@ const isLoading = computed(() => page.props.devices === undefined);
                     <StatusDot state="offline" class="size-2 shrink-0" />
                     <span class="flex-1">{{ offlineBannerText }}</span>
                     <button
-                        class="focus-ring -mr-1 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:text-foreground"
+                        class="focus-ring -mr-1 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:text-foreground sm:size-6"
                         title="Dismiss"
                         aria-label="Dismiss offline banner"
                         @click="dismissOfflineBanner"
@@ -465,11 +500,12 @@ const isLoading = computed(() => page.props.devices === undefined);
                         </button>
                     </div>
 
-                    <!-- Mobile long-press hint (... icon) — hidden when offline -->
+                    <!-- Mobile long-press hint — hidden when offline or after 3 visits -->
                     <div
-                        v-if="project.status === 'running' && isOnline"
-                        class="absolute top-3 right-3 z-10 flex group-hover:hidden lg:hidden"
+                        v-if="project.status === 'running' && isOnline && showLongPressHint"
+                        class="absolute top-3 right-3 z-10 flex items-center gap-1 group-hover:hidden lg:hidden"
                     >
+                        <span class="text-[10px] text-muted-foreground/40">Hold for options</span>
                         <MoreHorizontal
                             class="size-4 text-muted-foreground/40"
                         />

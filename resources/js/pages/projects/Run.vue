@@ -26,6 +26,7 @@ import { useChiefMessages } from '@/composables/useChiefMessages';
 import { useCommandRelay } from '@/composables/useCommandRelay';
 import { formatRelativeTime, useConnectionStatus } from '@/composables/useConnectionStatus';
 import { isInputFocused, isModKey } from '@/composables/useKeyboardShortcuts';
+import { usePullToRefresh } from '@/composables/usePullToRefresh';
 import ProjectLayout from '@/layouts/ProjectLayout.vue';
 
 interface StoryDetail {
@@ -71,6 +72,7 @@ const props = defineProps<{
 const { isOnline } = useConnectionStatus();
 const { sendCommand } = useCommandRelay();
 const { subscribe, on } = useChiefMessages(props.deviceId);
+const { isRefreshing: isPullRefreshing, pullDistance: runPullDistance } = usePullToRefresh();
 const expandedHistoryId = ref<number | null>(null);
 const showStopConfirm = ref(false);
 
@@ -408,6 +410,30 @@ function scrollToOutput() {
 
     <ProjectLayout :project-slug="props.projectSlug">
         <div class="flex flex-1 flex-col lg:flex-row">
+            <!-- Pull-to-refresh indicator (mobile) -->
+            <Transition
+                enter-active-class="transition duration-[var(--duration-standard)] ease-[var(--ease-gentle)]"
+                enter-from-class="opacity-0"
+                enter-to-class="opacity-100"
+                leave-active-class="transition duration-[var(--duration-standard)] ease-[var(--ease-gentle)]"
+                leave-from-class="opacity-100"
+                leave-to-class="opacity-0"
+            >
+                <div
+                    v-if="runPullDistance > 0 || isPullRefreshing"
+                    class="flex items-center justify-center py-2 text-sm text-muted-foreground lg:hidden"
+                    :style="{ transform: `translateY(${Math.max(0, runPullDistance - 20)}px)` }"
+                >
+                    <Loader2
+                        class="mr-2 size-4"
+                        :class="{ 'animate-spin': isPullRefreshing }"
+                    />
+                    <span v-if="isPullRefreshing">Refreshing...</span>
+                    <span v-else-if="runPullDistance >= 80">Release to refresh</span>
+                    <span v-else>Pull to refresh</span>
+                </div>
+            </Transition>
+
             <!-- Story List Panel (left on desktop, full on mobile) -->
             <div
                 class="flex flex-col border-border lg:w-1/2 lg:border-r"

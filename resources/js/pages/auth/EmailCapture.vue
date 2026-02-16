@@ -58,6 +58,7 @@ onMounted(() => {
                                 ref="emailInput"
                                 v-model="form.email"
                                 type="email"
+                                inputmode="email"
                                 placeholder="you@example.com"
                                 autocomplete="email"
                                 required

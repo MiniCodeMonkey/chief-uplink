@@ -279,6 +279,7 @@ function resetForm() {
                             ref="urlInput"
                             v-model="repoUrl"
                             type="url"
+                            inputmode="url"
                             placeholder="https://github.com/user/repo.git"
                             :aria-invalid="!!urlError || undefined"
                             @blur="handleUrlBlur"

@@ -69,7 +69,12 @@ function handleCancel() {
                         >Delete account</Button
                     >
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent
+                    :class="[
+                        'sm:max-w-lg',
+                        'max-sm:fixed max-sm:inset-0 max-sm:top-0 max-sm:left-0 max-sm:h-full max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:border-0',
+                    ]"
+                >
                     <form @submit.prevent="submit" class="space-y-6">
                         <DialogHeader class="space-y-3">
                             <DialogTitle>Are you sure you want to delete your account?</DialogTitle>

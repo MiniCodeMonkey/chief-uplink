@@ -281,6 +281,7 @@ watch(isOnline, (online, wasOnline) => {
                                 id="max-iterations"
                                 v-model.number="maxIterations"
                                 type="number"
+                                inputmode="numeric"
                                 min="1"
                                 max="100"
                                 :disabled="serverNotLive"

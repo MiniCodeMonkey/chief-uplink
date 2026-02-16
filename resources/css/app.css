@@ -359,6 +359,59 @@
     }
 }
 
+/* Mobile directional page transitions */
+@media (max-width: 1023px) {
+    .page-transition-forward-enter {
+        transform: translateX(30%);
+        opacity: 0;
+    }
+    .page-transition-forward-leave {
+        transform: translateX(-30%);
+        opacity: 0;
+    }
+    .page-transition-back-enter {
+        transform: translateX(-30%);
+        opacity: 0;
+    }
+    .page-transition-back-leave {
+        transform: translateX(30%);
+        opacity: 0;
+    }
+    .page-transition-active {
+        transition:
+            transform var(--duration-slow) var(--ease-snappy),
+            opacity var(--duration-slow) var(--ease-snappy);
+    }
+}
+
+/* Smooth scrolling with momentum on all scrollable areas */
+@layer base {
+    html {
+        -webkit-overflow-scrolling: touch;
+        scroll-behavior: smooth;
+    }
+
+    /* Ensure scrollable containers have momentum scrolling */
+    [class*='overflow-y-auto'],
+    [class*='overflow-x-auto'],
+    [class*='overflow-auto'],
+    [class*='overflow-scroll'] {
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+/* Minimum touch target size on mobile for interactive elements */
+@media (max-width: 639px) {
+    /* Dialog close buttons */
+    [data-slot='dialog-close'] {
+        min-width: 44px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
     *,

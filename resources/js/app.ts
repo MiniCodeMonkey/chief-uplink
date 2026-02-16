@@ -5,6 +5,7 @@ import { createApp, h } from 'vue';
 import '../css/app.css';
 import './echo';
 import { initializeTheme } from './composables/useAppearance';
+import { usePageTransitions } from './composables/usePageTransitions';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -29,6 +30,9 @@ createInertiaApp({
 
 // This will set light / dark mode on page load...
 initializeTheme();
+
+// Initialize page transition tracking for directional mobile transitions
+usePageTransitions();
 
 // Register the push notification service worker
 if ('serviceWorker' in navigator) {

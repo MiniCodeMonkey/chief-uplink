@@ -21,8 +21,8 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { useAppearance } from '@/composables/useAppearance';
 import { useTwoFactorAuth } from '@/composables/useTwoFactorAuth';
-import { confirm } from '@/routes/two-factor';
 import type { TwoFactorConfigContent } from '@/types';
+import { confirm } from '@/routes/two-factor';
 
 type Props = {
     requiresConfirmation: boolean;
@@ -110,7 +110,12 @@ watch(
 
 <template>
     <Dialog :open="isOpen" @update:open="isOpen = $event">
-        <DialogContent class="sm:max-w-md">
+        <DialogContent
+            :class="[
+                'sm:max-w-md',
+                'max-sm:fixed max-sm:inset-0 max-sm:top-0 max-sm:left-0 max-sm:h-full max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:border-0',
+            ]"
+        >
             <DialogHeader class="flex items-center justify-center">
                 <div
                     class="mb-3 w-auto rounded-full border border-border bg-card p-0.5 shadow-sm"

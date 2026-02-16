@@ -987,7 +987,8 @@
         "Viewport meta tag prevents zoom on input focus while allowing user zoom"
       ],
       "priority": 50,
-      "passes": false
+      "passes": false,
+      "inProgress": true
     },
     {
       "id": "US-051",

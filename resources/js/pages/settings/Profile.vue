@@ -96,6 +96,7 @@ const memberSince = new Date(user.created_at).toLocaleDateString(undefined, {
                         <Input
                             id="email"
                             type="email"
+                            inputmode="email"
                             class="mt-1 block w-full"
                             name="email"
                             :default-value="user.email ?? ''"
