@@ -1,0 +1,645 @@
+<script setup lang="ts">
+import { Head, router } from '@inertiajs/vue3';
+import {
+    ArrowDown,
+    ArrowLeft,
+    ChevronDown,
+    Loader2,
+    Save,
+    Send,
+} from 'lucide-vue-next';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useChiefMessages } from '@/composables/useChiefMessages';
+import { useCommandRelay } from '@/composables/useCommandRelay';
+import { useConnectionStatus } from '@/composables/useConnectionStatus';
+import { useDeviceStatus } from '@/composables/useDeviceStatus';
+import { useToast } from '@/composables/useToast';
+
+interface ChatMessage {
+    id: string;
+    role: 'user' | 'claude';
+    content: string;
+    isStreaming?: boolean;
+}
+
+const props = defineProps<{
+    projectSlug: string;
+    projectName: string;
+    deviceId: number;
+    mode: 'create' | 'refine';
+    prdId?: string;
+}>();
+
+useDeviceStatus();
+const { isOnline } = useConnectionStatus();
+const { sendCommand } = useCommandRelay();
+const { subscribe, on } = useChiefMessages(props.deviceId);
+const { success, error: errorToast } = useToast();
+
+// Chat state
+const messages = ref<ChatMessage[]>([]);
+const userInput = ref('');
+const isClaudeResponding = ref(false);
+const sessionId = ref<string | null>(null);
+const hasActiveSession = ref(false);
+const isSaving = ref(false);
+const saveAction = ref<'close' | 'run' | null>(null);
+
+// Refs for DOM elements
+const messagesContainer = ref<HTMLElement | null>(null);
+const textareaRef = ref<HTMLTextAreaElement | null>(null);
+const isAutoScrollPaused = ref(false);
+
+// Message ID counter
+let messageIdCounter = 0;
+function generateMessageId(): string {
+    return `msg-${++messageIdCounter}-${Date.now()}`;
+}
+
+// Generate session ID
+function generateSessionId(): string {
+    return `session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+const serverNotLive = computed(() => !isOnline.value);
+
+// Text area auto-resize
+function adjustTextareaHeight() {
+    const textarea = textareaRef.value;
+    if (!textarea) return;
+
+    // Reset height to auto to get the actual scrollHeight
+    textarea.style.height = 'auto';
+
+    // Max height is roughly 6 lines (6 * line-height ~24px = 144px)
+    const maxHeight = 144;
+    const scrollHeight = textarea.scrollHeight;
+    textarea.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+
+    // Enable internal scrolling if content exceeds max height
+    textarea.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden';
+}
+
+watch(userInput, () => {
+    nextTick(adjustTextareaHeight);
+});
+
+// Auto-scroll to bottom
+function scrollToBottom(smooth = true) {
+    if (!messagesContainer.value) return;
+    messagesContainer.value.scrollTo({
+        top: messagesContainer.value.scrollHeight,
+        behavior: smooth ? 'smooth' : 'instant',
+    });
+}
+
+function handleScroll() {
+    if (!messagesContainer.value) return;
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    isAutoScrollPaused.value = distanceFromBottom > 50;
+}
+
+function jumpToBottom() {
+    isAutoScrollPaused.value = false;
+    scrollToBottom();
+}
+
+// Focus the textarea
+function focusInput() {
+    nextTick(() => {
+        textareaRef.value?.focus();
+    });
+}
+
+// Send a user message
+async function handleSend() {
+    const text = userInput.value.trim();
+    if (!text || isClaudeResponding.value || serverNotLive.value) return;
+
+    // Add user message
+    const userMsg: ChatMessage = {
+        id: generateMessageId(),
+        role: 'user',
+        content: text,
+    };
+    messages.value.push(userMsg);
+
+    // Clear input and reset textarea height
+    userInput.value = '';
+    nextTick(() => {
+        adjustTextareaHeight();
+        scrollToBottom();
+    });
+
+    // Mark Claude as responding
+    isClaudeResponding.value = true;
+
+    // Add a placeholder Claude message for streaming
+    const claudeMsg: ChatMessage = {
+        id: generateMessageId(),
+        role: 'claude',
+        content: '',
+        isStreaming: true,
+    };
+    messages.value.push(claudeMsg);
+
+    if (!hasActiveSession.value) {
+        // First message — start the session
+        sessionId.value = generateSessionId();
+        hasActiveSession.value = true;
+
+        await sendCommand(props.deviceId, 'new_prd', {
+            project_slug: props.projectSlug,
+            session_id: sessionId.value,
+            message: text,
+        });
+    } else {
+        // Subsequent message — send via prd_message
+        await sendCommand(props.deviceId, 'prd_message', {
+            project_slug: props.projectSlug,
+            session_id: sessionId.value,
+            message: text,
+        });
+    }
+}
+
+// Handle keyboard events in textarea
+function handleKeydown(e: KeyboardEvent) {
+    // Desktop: Enter sends, Shift+Enter adds newline
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+    }
+}
+
+// Handle save actions
+async function handleSaveAndClose() {
+    if (!hasActiveSession.value || isSaving.value) return;
+
+    isSaving.value = true;
+    saveAction.value = 'close';
+
+    const result = await sendCommand(props.deviceId, 'close_prd_session', {
+        project_slug: props.projectSlug,
+        session_id: sessionId.value,
+        save: true,
+    });
+
+    if (result) {
+        hasActiveSession.value = false;
+        success('PRD saved');
+        router.visit(`/projects/${props.projectSlug}/prds`);
+    } else {
+        errorToast('Save failed', 'Failed to save the PRD. Please try again.');
+        isSaving.value = false;
+        saveAction.value = null;
+    }
+}
+
+async function handleSaveAndRun() {
+    if (!hasActiveSession.value || isSaving.value) return;
+
+    isSaving.value = true;
+    saveAction.value = 'run';
+
+    const result = await sendCommand(props.deviceId, 'close_prd_session', {
+        project_slug: props.projectSlug,
+        session_id: sessionId.value,
+        save: true,
+    });
+
+    if (result) {
+        hasActiveSession.value = false;
+
+        // Start the run
+        await sendCommand(props.deviceId, 'start_run', {
+            project_slug: props.projectSlug,
+        });
+
+        success('PRD saved — starting run');
+        router.visit(`/projects/${props.projectSlug}/run`);
+    } else {
+        errorToast('Save failed', 'Failed to save the PRD. Please try again.');
+        isSaving.value = false;
+        saveAction.value = null;
+    }
+}
+
+// Back navigation with unsaved changes confirmation
+function handleBack() {
+    if (hasActiveSession.value) {
+        if (confirm('You have an active session. Leave without saving?')) {
+            // Kill the session without saving
+            sendCommand(props.deviceId, 'close_prd_session', {
+                project_slug: props.projectSlug,
+                session_id: sessionId.value,
+                save: false,
+            });
+            hasActiveSession.value = false;
+            router.visit(`/projects/${props.projectSlug}/prds`);
+        }
+    } else {
+        router.visit(`/projects/${props.projectSlug}/prds`);
+    }
+}
+
+// Before unload warning
+function handleBeforeUnload(e: BeforeUnloadEvent) {
+    if (hasActiveSession.value) {
+        e.preventDefault();
+    }
+}
+
+// Listen for streaming output from chief
+onMounted(() => {
+    subscribe();
+
+    // Handle PRD chat output (claude streaming)
+    on('prd_output', (message) => {
+        const payload = message.message as Record<string, unknown>;
+        if (payload.session_id !== sessionId.value) return;
+
+        const text = payload.text as string;
+        if (!text) return;
+
+        // Append to the last Claude message if streaming
+        const lastMsg = messages.value[messages.value.length - 1];
+        if (lastMsg && lastMsg.role === 'claude' && lastMsg.isStreaming) {
+            lastMsg.content += text;
+        }
+
+        if (!isAutoScrollPaused.value) {
+            nextTick(() => scrollToBottom());
+        }
+    });
+
+    // Handle Claude response complete
+    on('prd_response_complete', (message) => {
+        const payload = message.message as Record<string, unknown>;
+        if (payload.session_id !== sessionId.value) return;
+
+        isClaudeResponding.value = false;
+
+        // Mark the last Claude message as not streaming
+        const lastMsg = messages.value[messages.value.length - 1];
+        if (lastMsg && lastMsg.role === 'claude') {
+            lastMsg.isStreaming = false;
+        }
+
+        focusInput();
+    });
+
+    // Handle errors
+    on('error', (message) => {
+        const payload = message.message as Record<string, unknown>;
+        if (payload.session_id && payload.session_id !== sessionId.value) return;
+
+        isClaudeResponding.value = false;
+
+        // Mark the last Claude message as not streaming
+        const lastMsg = messages.value[messages.value.length - 1];
+        if (lastMsg && lastMsg.role === 'claude' && lastMsg.isStreaming) {
+            if (lastMsg.content === '') {
+                // Remove empty Claude message if error occurred before any output
+                messages.value.pop();
+            } else {
+                lastMsg.isStreaming = false;
+            }
+        }
+
+        focusInput();
+    });
+
+    // Handle session timeout warning
+    on('session_timeout_warning', (message) => {
+        const payload = message.message as Record<string, unknown>;
+        if (payload.session_id !== sessionId.value) return;
+
+        const minutesRemaining = payload.minutes_remaining as number;
+        if (minutesRemaining <= 1) {
+            errorToast('Session expiring', 'Your session will expire in less than 1 minute. Save your work.');
+        } else {
+            useToast().warning('Session timeout', `Session will expire in ${minutesRemaining} minutes.`);
+        }
+    });
+
+    // Handle session expired
+    on('session_expired', (message) => {
+        const payload = message.message as Record<string, unknown>;
+        if (payload.session_id !== sessionId.value) return;
+
+        isClaudeResponding.value = false;
+        hasActiveSession.value = false;
+
+        const lastMsg = messages.value[messages.value.length - 1];
+        if (lastMsg && lastMsg.role === 'claude' && lastMsg.isStreaming) {
+            lastMsg.isStreaming = false;
+        }
+
+        errorToast('Session expired', 'Your session has expired. Your progress has been saved.');
+    });
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Auto-focus the input
+    focusInput();
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+});
+
+// Simple markdown-like rendering for Claude messages
+// Uses the markdown-it library for proper rendering
+const renderedMarkdown = computed(() => {
+    const cache = new Map<string, string>();
+    return (content: string) => {
+        if (cache.has(content)) return cache.get(content)!;
+        // Basic markdown rendering — escape HTML, then handle basic patterns
+        let html = content
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        // Code blocks (```...```)
+        html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, lang, code) => {
+            return `<pre class="my-2 rounded-md bg-background p-3 text-sm"><code class="language-${lang}">${code}</code></pre>`;
+        });
+
+        // Inline code (`...`)
+        html = html.replace(/`([^`]+)`/g, '<code class="rounded bg-background px-1.5 py-0.5 font-mono text-sm">$1</code>');
+
+        // Bold (**...**)
+        html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+        // Italic (*...*)
+        html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+
+        // Headers (# ...)
+        html = html.replace(/^### (.+)$/gm, '<h3 class="mt-3 mb-1 text-sm font-semibold">$1</h3>');
+        html = html.replace(/^## (.+)$/gm, '<h2 class="mt-4 mb-1 text-base font-semibold">$1</h2>');
+        html = html.replace(/^# (.+)$/gm, '<h1 class="mt-4 mb-2 text-lg font-bold">$1</h1>');
+
+        // Unordered lists (- ...)
+        html = html.replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>');
+
+        // Ordered lists (1. ...)
+        html = html.replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>');
+
+        // Line breaks
+        html = html.replace(/\n/g, '<br>');
+
+        cache.set(content, html);
+        return html;
+    };
+});
+
+// Save button label
+const saveButtonLabel = computed(() => {
+    if (isSaving.value) {
+        return saveAction.value === 'run' ? 'Saving & starting...' : 'Saving...';
+    }
+    return 'Save';
+});
+</script>
+
+<template>
+    <Head :title="`${props.projectName} — New PRD`" />
+
+    <div class="flex min-h-screen w-full flex-col bg-background">
+        <!-- Custom header for chat page (no tab bar) -->
+        <header class="border-b border-border">
+            <div class="flex h-14 items-center justify-between px-4">
+                <!-- Left: Back button + title -->
+                <div class="flex items-center gap-2">
+                    <button
+                        class="focus-ring flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors duration-[var(--duration-micro)] hover:bg-accent hover:text-foreground"
+                        style="min-width: 44px; min-height: 44px"
+                        aria-label="Back to PRDs"
+                        @click="handleBack"
+                    >
+                        <ArrowLeft class="size-5" />
+                    </button>
+                    <div class="min-w-0">
+                        <h1 class="truncate text-sm font-semibold">New PRD</h1>
+                        <p class="truncate text-xs text-muted-foreground">{{ props.projectName }}</p>
+                    </div>
+                </div>
+
+                <!-- Right: Save dropdown -->
+                <div class="flex items-center gap-2">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger as-child>
+                            <Button
+                                :disabled="!hasActiveSession || isSaving || serverNotLive"
+                                size="sm"
+                            >
+                                <Loader2
+                                    v-if="isSaving"
+                                    class="size-4 animate-spin"
+                                />
+                                <Save v-else class="size-4" />
+                                {{ saveButtonLabel }}
+                                <ChevronDown class="size-3.5" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem @click="handleSaveAndClose">
+                                Save & Close
+                            </DropdownMenuItem>
+                            <DropdownMenuItem @click="handleSaveAndRun">
+                                Save & Run
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </div>
+        </header>
+
+        <!-- Chat messages area -->
+        <div
+            ref="messagesContainer"
+            class="flex-1 overflow-y-auto"
+            @scroll="handleScroll"
+        >
+            <div class="mx-auto max-w-3xl space-y-4 p-4">
+                <!-- Empty state -->
+                <div
+                    v-if="messages.length === 0"
+                    class="flex flex-col items-center justify-center py-24 text-center"
+                >
+                    <div class="mb-4 rounded-full bg-primary/10 p-4">
+                        <Send class="size-8 text-primary" />
+                    </div>
+                    <h2 class="text-lg font-semibold">Create a new PRD</h2>
+                    <p class="mt-2 max-w-sm text-sm text-muted-foreground">
+                        Describe what you want to build. Claude will help you create a detailed Product Requirements Document.
+                    </p>
+                </div>
+
+                <!-- Chat messages -->
+                <TransitionGroup
+                    enter-active-class="transition-all duration-[var(--duration-standard)] ease-[var(--ease-gentle)]"
+                    enter-from-class="opacity-0 translate-y-2"
+                    enter-to-class="opacity-100 translate-y-0"
+                >
+                    <div
+                        v-for="msg in messages"
+                        :key="msg.id"
+                        class="flex"
+                        :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+                    >
+                        <!-- User message -->
+                        <div
+                            v-if="msg.role === 'user'"
+                            class="max-w-[85%] rounded-2xl rounded-br-md bg-primary/10 px-4 py-2.5 text-sm text-foreground lg:max-w-[70%]"
+                        >
+                            <p class="whitespace-pre-wrap break-words">{{ msg.content }}</p>
+                        </div>
+
+                        <!-- Claude message -->
+                        <div
+                            v-else
+                            class="max-w-[85%] rounded-2xl rounded-bl-md bg-surface px-4 py-2.5 text-sm text-foreground lg:max-w-[70%]"
+                            :class="{ 'border border-border': true }"
+                        >
+                            <!-- Streaming content -->
+                            <div
+                                v-if="msg.content"
+                                class="prose-chat break-words"
+                                v-html="renderedMarkdown(msg.content)"
+                            />
+
+                            <!-- Typing indicator (empty streaming message) -->
+                            <div
+                                v-if="msg.isStreaming && msg.content === ''"
+                                class="flex items-center gap-1.5 py-1"
+                            >
+                                <span class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground" style="animation-delay: 0ms" />
+                                <span class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground" style="animation-delay: 200ms" />
+                                <span class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground" style="animation-delay: 400ms" />
+                            </div>
+
+                            <!-- Streaming cursor -->
+                            <span
+                                v-if="msg.isStreaming && msg.content !== ''"
+                                class="inline-block h-4 w-0.5 animate-pulse bg-primary align-text-bottom"
+                            />
+                        </div>
+                    </div>
+                </TransitionGroup>
+            </div>
+        </div>
+
+        <!-- New messages pill -->
+        <Transition
+            enter-active-class="transition-all duration-[var(--duration-standard)] ease-[var(--ease-snappy)]"
+            enter-from-class="opacity-0 translate-y-2"
+            enter-to-class="opacity-100 translate-y-0"
+            leave-active-class="transition-all duration-[var(--duration-micro)] ease-[var(--ease-snappy)]"
+            leave-from-class="opacity-100 translate-y-0"
+            leave-to-class="opacity-0 translate-y-2"
+        >
+            <button
+                v-if="isAutoScrollPaused && messages.length > 0"
+                class="focus-ring fixed bottom-24 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground shadow-lg transition-colors hover:bg-primary/90"
+                @click="jumpToBottom"
+            >
+                <ArrowDown class="mr-1 inline-block size-3" />
+                New messages
+            </button>
+        </Transition>
+
+        <!-- Input area (pinned to bottom) -->
+        <div class="border-t border-border bg-background">
+            <div class="mx-auto flex max-w-3xl items-end gap-2 p-4">
+                <div class="relative flex-1">
+                    <textarea
+                        ref="textareaRef"
+                        v-model="userInput"
+                        :disabled="isSaving || serverNotLive"
+                        class="focus-ring w-full resize-none rounded-xl border border-border bg-surface px-4 py-3 pr-12 text-sm text-foreground placeholder-muted-foreground transition-colors duration-[var(--duration-micro)] focus:border-primary disabled:cursor-not-allowed disabled:opacity-50 lg:pr-4"
+                        :class="{ 'opacity-50': isClaudeResponding }"
+                        placeholder="Describe what you want to build..."
+                        rows="1"
+                        style="overflow-y: hidden"
+                        @keydown="handleKeydown"
+                    />
+
+                    <!-- Mobile send button (inside textarea) -->
+                    <button
+                        class="focus-ring absolute bottom-2 right-2 flex items-center justify-center rounded-lg bg-primary p-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 lg:hidden"
+                        :disabled="!userInput.trim() || isClaudeResponding || isSaving || serverNotLive"
+                        aria-label="Send message"
+                        @click="handleSend"
+                    >
+                        <Send class="size-4" />
+                    </button>
+                </div>
+
+                <!-- Desktop send button -->
+                <Button
+                    class="hidden lg:flex"
+                    :disabled="!userInput.trim() || isClaudeResponding || isSaving || serverNotLive"
+                    @click="handleSend"
+                >
+                    <Send class="size-4" />
+                    Send
+                </Button>
+            </div>
+
+            <!-- Helper text -->
+            <div class="mx-auto max-w-3xl px-4 pb-3">
+                <p class="text-[10px] text-muted-foreground">
+                    <span class="hidden lg:inline">Press Enter to send, Shift+Enter for new line.</span>
+                    <span v-if="serverNotLive" class="text-destructive"> Server offline — messages cannot be sent.</span>
+                    <span v-else-if="isClaudeResponding" class="text-primary"> Claude is thinking...</span>
+                </p>
+            </div>
+        </div>
+    </div>
+</template>
+
+<style scoped>
+/* Surface color for Claude messages */
+.bg-surface {
+    background-color: var(--surface, oklch(0.21 0.006 285));
+}
+
+/* Prose-like styling for Claude message markdown */
+.prose-chat :deep(h1),
+.prose-chat :deep(h2),
+.prose-chat :deep(h3) {
+    color: var(--foreground);
+}
+
+.prose-chat :deep(code) {
+    font-family: var(--font-mono, 'Geist Mono', monospace);
+}
+
+.prose-chat :deep(pre) {
+    overflow-x: auto;
+}
+
+.prose-chat :deep(li) {
+    margin-top: 0.125rem;
+    margin-bottom: 0.125rem;
+}
+
+.prose-chat :deep(strong) {
+    font-weight: 600;
+}
+
+/* Typing dots stagger animation */
+.animate-pulse {
+    animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+</style>

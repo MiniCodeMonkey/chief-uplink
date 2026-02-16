@@ -548,7 +548,8 @@
         "Scroll-to-bottom on new messages with smooth scrolling; \"New messages\" pill appears if user has scrolled up"
       ],
       "priority": 28,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-029",

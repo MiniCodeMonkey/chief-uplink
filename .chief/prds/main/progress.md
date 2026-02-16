@@ -82,7 +82,10 @@
 - ClaudeOutputPanel component: receives `chunks` array, animates text via requestAnimationFrame, handles auto-scroll/jump-to-bottom
 - PRDs are fetched live from chief server via `get_prds` command + `prds_response` listener — not cached in the web app
 - Valid command types listed in both `CommandRelayController::VALID_COMMANDS` (PHP) and `useCommandRelay` `CommandType` union (TS) — keep in sync
-- PRD-related routes planned: `/projects/{slug}/prd/new` (creation chat), `/projects/{slug}/prd/{id}/refine` (refinement chat)
+- PRD creation chat at `/projects/{slug}/prd/new` — uses PrdChat.vue component with `mode: 'create'` prop, no ProjectLayout (full-screen dedicated page)
+- PRD refinement route planned: `/projects/{slug}/prd/{id}/refine` — will reuse PrdChat.vue with `mode: 'refine'` prop
+- PRD chat WebSocket events: `prd_output` (streaming), `prd_response_complete` (Claude done), `session_timeout_warning`, `session_expired`
+- PRD chat session flow: first message sends `new_prd` to create session, subsequent messages use `prd_message` with session_id
 
 ---
 
@@ -1032,5 +1035,50 @@
   - PRD "Run" action sends `start_run` with `prd_id` in payload and navigates to Run tab — the chief server handles PRD selection
   - Status badge colors follow the established pattern: Active=success, Done=muted, Draft=warning
   - `<TransitionGroup>` for stagger animation needs each child to have a unique `key`
+
+---
+
+## 2026-02-16 - US-028
+- What was implemented:
+  - PRD Creation Chat page at `/projects/{slug}/prd/new` — full-screen dedicated focus, no tab bar
+  - `ProjectController::prdCreate()` method with user-scoped project access (same `findProject()` pattern)
+  - Route registered in `routes/web.php` within the authenticated middleware group
+  - Chat interface with alternating user/Claude message bubbles
+  - User messages right-aligned with subtle accent background (`bg-primary/10`), Claude messages left-aligned with surface background and border
+  - On entry, generates a session_id and sends `new_prd` command to chief server when first message is sent
+  - Subsequent messages sent via `prd_message` command with session_id
+  - User input: textarea pinned to bottom with send button (Enter to send on desktop, Shift+Enter for newline; mobile send button inside textarea)
+  - Textarea auto-resizes as user types (grows up to ~6 lines / 144px, then scrolls internally), shrinks when cleared
+  - Auto-focus on textarea on page load and after each Claude response completes
+  - Markdown rendering in Claude messages (headers, bold, italic, code blocks, inline code, lists)
+  - Back navigation with unsaved changes confirmation: `confirm()` dialog with "You have an active session. Leave without saving?"
+  - "Save" dropdown in header with "Save & Close" (closes session, navigates to PRDs tab) and "Save & Run" (closes session, starts run, navigates to Run tab)
+  - Loading state: animated typing indicator (three pulsing dots) in Claude's message area while waiting for response
+  - Send button disabled while Claude is responding (with opacity change)
+  - Messages animate in with smooth slide-up entrance via `<TransitionGroup>`
+  - Scroll-to-bottom on new messages with smooth scrolling; "New messages" pill appears if user has scrolled up
+  - "Jump to bottom" button when auto-scroll is paused
+  - Streaming cursor (pulsing vertical bar) shown at end of Claude's streaming message
+  - Session timeout warnings via `session_timeout_warning` and `session_expired` WebSocket events
+  - `beforeunload` handler warns about unsaved changes
+  - Custom header with back arrow, title, and save dropdown (no ProjectLayout tab bar)
+  - 9 comprehensive tests covering: page rendering, required props, idle/no_prd project variants, access control (404 non-existent, 404 other user, auth redirect, revoked device), multi-device deviceId
+  - All 375 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - app/Http/Controllers/ProjectController.php (updated: added prdCreate method)
+  - routes/web.php (updated: added `/projects/{slug}/prd/new` route)
+  - resources/js/pages/projects/PrdChat.vue (new: full PRD creation chat page)
+  - tests/Feature/Projects/PrdChatTest.php (new: 9 tests)
+  - .chief/prds/main/prd.json (updated: US-028 passes: true)
+- **Learnings for future iterations:**
+  - PRD chat uses a custom header (not ProjectLayout) since it's a full-screen dedicated page — no tab bar shown
+  - Session management: `hasActiveSession` ref tracks whether a `new_prd` command has been sent — first message creates the session, subsequent messages use `prd_message`
+  - WebSocket message types for PRD chat: `prd_output` (streaming text), `prd_response_complete` (Claude done), `session_timeout_warning`, `session_expired`
+  - Auto-resize textarea: set `height: auto` then `height: min(scrollHeight, maxHeight)` — use `overflowY: hidden` when below max, `auto` when above
+  - `v-html` with `renderedMarkdown()` for Claude messages — basic inline markdown rendering with HTML escaping for security
+  - Save & Run flow: `close_prd_session` with `save: true` → then `start_run` → navigate to Run tab
+  - The `confirm()` dialog is used for back navigation (not ConfirmDialog component) since it's a simple yes/no with no form
+  - `beforeunload` event handler: call `e.preventDefault()` to trigger browser's native "unsaved changes" dialog
+  - PRD refinement route (`/projects/{slug}/prd/{id}/refine`) is planned for US-030 — same PrdChat component can be reused with `mode: 'refine'` prop
 
 ---
