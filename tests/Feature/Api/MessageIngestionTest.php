@@ -1,0 +1,381 @@
+<?php
+
+use App\Events\ChiefMessageReceived;
+use App\Http\Controllers\Api\MessageIngestionController;
+use App\Models\CachedProjectState;
+use App\Models\DeviceAuthorization;
+use App\Models\User;
+use App\Services\WebSocketMessageBuffer;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Str;
+
+beforeEach(function () {
+    $this->user = User::factory()->create();
+    $this->device = DeviceAuthorization::factory()->for($this->user)->online()->create([
+        'device_name' => 'test-device',
+    ]);
+});
+
+function generateIngestionToken(DeviceAuthorization $device, int $expiresIn = 3600): string
+{
+    $payload = [
+        'sub' => $device->user_id,
+        'did' => $device->id,
+        'iat' => time(),
+        'exp' => time() + $expiresIn,
+    ];
+
+    $payloadJson = json_encode($payload);
+    $payloadBase64 = rtrim(strtr(base64_encode($payloadJson), '+/', '-_'), '=');
+    $signature = hash_hmac('sha256', $payloadBase64, config('app.key'));
+
+    return $payloadBase64.'.'.$signature;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Successful batch ingestion
+|--------------------------------------------------------------------------
+*/
+
+test('successful batch ingestion returns accepted count and batch info', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+    $batchId = Str::uuid()->toString();
+
+    $response = $this->postJson('/api/device/messages', [
+        'batch_id' => $batchId,
+        'messages' => [
+            ['type' => 'claude_output', 'id' => 'msg-1', 'payload' => ['text' => 'Hello']],
+            ['type' => 'run_progress', 'id' => 'msg-2', 'payload' => ['progress' => 50]],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response->assertOk()
+        ->assertJson([
+            'accepted' => 2,
+            'batch_id' => $batchId,
+            'session_id' => $this->device->session_id,
+        ]);
+});
+
+test('batch ingestion broadcasts each message to browser channel', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+    $batchId = Str::uuid()->toString();
+
+    $this->postJson('/api/device/messages', [
+        'batch_id' => $batchId,
+        'messages' => [
+            ['type' => 'claude_output', 'id' => 'msg-1', 'payload' => ['text' => 'Hello']],
+            ['type' => 'run_progress', 'id' => 'msg-2', 'payload' => ['progress' => 50]],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    Event::assertDispatchedTimes(ChiefMessageReceived::class, 2);
+
+    Event::assertDispatched(ChiefMessageReceived::class, function ($event) {
+        return $event->deviceId === $this->device->id
+            && $event->userId === $this->user->id
+            && $event->message['type'] === 'claude_output';
+    });
+
+    Event::assertDispatched(ChiefMessageReceived::class, function ($event) {
+        return $event->message['type'] === 'run_progress';
+    });
+});
+
+test('batch ingestion buffers bufferable messages', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $mock = $this->mock(WebSocketMessageBuffer::class);
+    $mock->shouldReceive('buffer')
+        ->once()
+        ->with($this->device->id, $this->device->session_id, \Mockery::on(function ($msg) {
+            return $msg['type'] === 'claude_output';
+        }))
+        ->andReturn(true);
+
+    // log_lines is not in BUFFERABLE_TYPES, so buffer should only be called once
+    $mock->shouldReceive('buffer')
+        ->once()
+        ->with($this->device->id, $this->device->session_id, \Mockery::on(function ($msg) {
+            return $msg['type'] === 'log_lines';
+        }))
+        ->andReturn(false);
+
+    $token = generateIngestionToken($this->device);
+    $batchId = Str::uuid()->toString();
+
+    $this->postJson('/api/device/messages', [
+        'batch_id' => $batchId,
+        'messages' => [
+            ['type' => 'claude_output', 'id' => 'msg-1', 'payload' => ['text' => 'Hello']],
+            ['type' => 'log_lines', 'id' => 'msg-2', 'payload' => ['lines' => ['line1']]],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+});
+
+test('project_state message updates cached project state', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+    $batchId = Str::uuid()->toString();
+
+    $this->postJson('/api/device/messages', [
+        'batch_id' => $batchId,
+        'messages' => [
+            [
+                'type' => 'project_state',
+                'payload' => [
+                    'projects' => [
+                        [
+                            'project_slug' => 'my-project',
+                            'project_name' => 'My Project',
+                            'status' => 'running',
+                            'git_branch' => 'main',
+                            'stories_completed' => 3,
+                            'stories_total' => 10,
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $cached = CachedProjectState::where('device_authorization_id', $this->device->id)
+        ->where('project_slug', 'my-project')
+        ->first();
+
+    expect($cached)->not->toBeNull()
+        ->and($cached->project_name)->toBe('My Project')
+        ->and($cached->status)->toBe('running')
+        ->and($cached->git_branch)->toBe('main')
+        ->and($cached->stories_completed)->toBe(3)
+        ->and($cached->stories_total)->toBe(10);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Idempotent retry (batch deduplication)
+|--------------------------------------------------------------------------
+*/
+
+test('duplicate batch_id returns cached response without reprocessing', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+    $batchId = Str::uuid()->toString();
+
+    $payload = [
+        'batch_id' => $batchId,
+        'messages' => [
+            ['type' => 'claude_output', 'id' => 'msg-1', 'payload' => ['text' => 'Hello']],
+        ],
+    ];
+
+    // First request
+    $response1 = $this->postJson('/api/device/messages', $payload, [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response1->assertOk()->assertJson(['accepted' => 1]);
+
+    // Event dispatched once
+    Event::assertDispatchedTimes(ChiefMessageReceived::class, 1);
+
+    // Second request with same batch_id — should return cached response
+    $response2 = $this->postJson('/api/device/messages', $payload, [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response2->assertOk()->assertJson([
+        'accepted' => 1,
+        'batch_id' => $batchId,
+    ]);
+
+    // Event should NOT be dispatched again (still 1 total)
+    Event::assertDispatchedTimes(ChiefMessageReceived::class, 1);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Validation errors
+|--------------------------------------------------------------------------
+*/
+
+test('empty messages array is rejected', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+
+    $response = $this->postJson('/api/device/messages', [
+        'batch_id' => Str::uuid()->toString(),
+        'messages' => [],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response->assertStatus(422);
+});
+
+test('missing messages field is rejected', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+
+    $response = $this->postJson('/api/device/messages', [
+        'batch_id' => Str::uuid()->toString(),
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response->assertStatus(422);
+});
+
+test('missing batch_id is rejected', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+
+    $response = $this->postJson('/api/device/messages', [
+        'messages' => [
+            ['type' => 'claude_output'],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response->assertStatus(422);
+});
+
+test('oversized batch with more than 50 messages is rejected', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+
+    $messages = array_fill(0, 51, ['type' => 'claude_output', 'id' => 'msg']);
+
+    $response = $this->postJson('/api/device/messages', [
+        'batch_id' => Str::uuid()->toString(),
+        'messages' => $messages,
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response->assertStatus(422);
+});
+
+test('unknown message type rejects the entire batch', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+
+    $response = $this->postJson('/api/device/messages', [
+        'batch_id' => Str::uuid()->toString(),
+        'messages' => [
+            ['type' => 'claude_output', 'id' => 'msg-1'],
+            ['type' => 'totally_invalid_type', 'id' => 'msg-2'],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response->assertStatus(422)
+        ->assertJson([
+            'error' => 'unknown_message_type',
+        ]);
+
+    // No events should be dispatched since the batch was rejected
+    Event::assertNotDispatched(ChiefMessageReceived::class);
+});
+
+test('message without type field is rejected by validation', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+
+    $response = $this->postJson('/api/device/messages', [
+        'batch_id' => Str::uuid()->toString(),
+        'messages' => [
+            ['id' => 'msg-1', 'payload' => ['text' => 'no type']],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response->assertStatus(422);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Authentication failures
+|--------------------------------------------------------------------------
+*/
+
+test('message ingestion with revoked device returns 401', function () {
+    $this->device->update(['revoked_at' => now()]);
+    $token = generateIngestionToken($this->device);
+
+    $response = $this->postJson('/api/device/messages', [
+        'batch_id' => Str::uuid()->toString(),
+        'messages' => [
+            ['type' => 'claude_output'],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response->assertStatus(401)
+        ->assertJson(['error' => 'revoked_device']);
+});
+
+test('message ingestion without token returns 401', function () {
+    $response = $this->postJson('/api/device/messages', [
+        'batch_id' => Str::uuid()->toString(),
+        'messages' => [
+            ['type' => 'claude_output'],
+        ],
+    ]);
+
+    $response->assertStatus(401)
+        ->assertJson(['error' => 'missing_token']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| All allowed message types are accepted
+|--------------------------------------------------------------------------
+*/
+
+test('all allowed message types are accepted', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+
+    $messages = collect(MessageIngestionController::ALLOWED_TYPES)
+        ->map(fn ($type) => ['type' => $type, 'id' => Str::uuid()->toString()])
+        ->toArray();
+
+    $response = $this->postJson('/api/device/messages', [
+        'batch_id' => Str::uuid()->toString(),
+        'messages' => $messages,
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response->assertOk()
+        ->assertJson([
+            'accepted' => count(MessageIngestionController::ALLOWED_TYPES),
+        ]);
+});

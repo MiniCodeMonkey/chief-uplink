@@ -74,4 +74,6 @@ Route::prefix('device')->middleware(['device.api'])->group(function () {
         ->name('device.connect');
     Route::post('/disconnect', [\App\Http\Controllers\Api\DevicePresenceController::class, 'disconnect'])
         ->name('device.disconnect');
+    Route::post('/messages', [\App\Http\Controllers\Api\MessageIngestionController::class, 'ingest'])
+        ->name('device.messages');
 });
