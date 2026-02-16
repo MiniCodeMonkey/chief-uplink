@@ -1,68 +1,24 @@
 <?php
 
+use App\Events\ChiefCommandDispatched;
 use App\Events\ChiefMessageReceived;
 use App\Http\Controllers\Api\CommandRelayController;
 use App\Models\DeviceAuthorization;
 use App\Models\User;
-use App\Services\ServerConnectionManager;
 use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
-    $this->device = DeviceAuthorization::factory()->for($this->user)->create([
-        'is_online' => true,
+    $this->device = DeviceAuthorization::factory()->for($this->user)->online()->create([
         'device_name' => 'test-device',
     ]);
     $this->otherUser = User::factory()->create();
-    $this->otherDevice = DeviceAuthorization::factory()->for($this->otherUser)->create([
-        'is_online' => true,
-    ]);
+    $this->otherDevice = DeviceAuthorization::factory()->for($this->otherUser)->online()->create();
 });
 
-function generateRelayTestAccessToken(DeviceAuthorization $device, int $expiresIn = 3600): string
-{
-    $payload = [
-        'sub' => $device->user_id,
-        'did' => $device->id,
-        'iat' => time(),
-        'exp' => time() + $expiresIn,
-    ];
-
-    $payloadJson = json_encode($payload);
-    $payloadBase64 = rtrim(strtr(base64_encode($payloadJson), '+/', '-_'), '=');
-    $signature = hash_hmac('sha256', $payloadBase64, config('app.key'));
-
-    return $payloadBase64.'.'.$signature;
-}
-
-function setupOnlineDevice(ServerConnectionManager $manager, DeviceAuthorization $device): void
-{
-    $connectionId = $device->id * 1000; // Use a unique connection ID based on device ID
-    $token = generateRelayTestAccessToken($device);
-
-    // Create a mock Connection object
-    $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-    $connection->shouldReceive('send')->andReturn(null);
-
-    Event::fake();
-
-    $manager->handleHello($connectionId, [
-        'type' => 'hello',
-        'protocol_version' => 1,
-        'chief_version' => '0.5.0',
-        'device_name' => $device->device_name,
-        'os' => 'linux',
-        'arch' => 'amd64',
-        'access_token' => $token,
-    ]);
-
-    $manager->registerConnectionObject($connectionId, $connection);
-}
-
 describe('Browser → Chief Command Relay', function () {
-    it('sends valid command to online device', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupOnlineDevice($manager, $this->device);
+    it('sends valid command to online device via broadcast', function () {
+        Event::fake([ChiefCommandDispatched::class]);
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -76,10 +32,17 @@ describe('Browser → Chief Command Relay', function () {
                 'type' => 'start_run',
                 'device_id' => $this->device->id,
             ]);
+
+        Event::assertDispatched(ChiefCommandDispatched::class, function ($event) {
+            return $event->deviceId === $this->device->id
+                && $event->userId === $this->user->id
+                && $event->command['type'] === 'start_run'
+                && $event->command['payload']['project_slug'] === 'my-project';
+        });
     });
 
     it('returns 503 when device is offline', function () {
-        // Don't set up online device — leave it offline in the connection manager
+        $this->device->update(['is_online' => false]);
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -95,9 +58,6 @@ describe('Browser → Chief Command Relay', function () {
     });
 
     it('returns 403 for another user\'s device', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupOnlineDevice($manager, $this->otherDevice);
-
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->otherDevice->id}", [
                 'type' => 'start_run',
@@ -149,8 +109,7 @@ describe('Browser → Chief Command Relay', function () {
     });
 
     it('accepts all valid command types', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupOnlineDevice($manager, $this->device);
+        Event::fake([ChiefCommandDispatched::class]);
 
         foreach (CommandRelayController::VALID_COMMANDS as $command) {
             $response = $this->actingAs($this->user)
@@ -163,31 +122,8 @@ describe('Browser → Chief Command Relay', function () {
         }
     });
 
-    it('sends command with payload to chief', function () {
-        $manager = app(ServerConnectionManager::class);
-        $connectionId = $this->device->id * 1000;
-        $token = generateRelayTestAccessToken($this->device);
-
-        // Create a mock connection that records what's sent
-        $sentMessages = [];
-        $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-        $connection->shouldReceive('send')->andReturnUsing(function ($msg) use (&$sentMessages) {
-            $sentMessages[] = json_decode($msg, true);
-        });
-
-        Event::fake();
-
-        $manager->handleHello($connectionId, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'chief_version' => '0.5.0',
-            'device_name' => 'test-device',
-            'os' => 'linux',
-            'arch' => 'amd64',
-            'access_token' => $token,
-        ]);
-
-        $manager->registerConnectionObject($connectionId, $connection);
+    it('broadcasts command with correct payload to chief', function () {
+        Event::fake([ChiefCommandDispatched::class]);
 
         $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -195,12 +131,11 @@ describe('Browser → Chief Command Relay', function () {
                 'payload' => ['url' => 'https://github.com/user/repo.git', 'directory' => 'repo'],
             ]);
 
-        // Verify the message was sent with correct structure
-        // First message is the welcome response, second is our command
-        $lastMessage = end($sentMessages);
-        expect($lastMessage['type'])->toBe('clone_repo');
-        expect($lastMessage['payload']['url'])->toBe('https://github.com/user/repo.git');
-        expect($lastMessage['payload']['directory'])->toBe('repo');
+        Event::assertDispatched(ChiefCommandDispatched::class, function ($event) {
+            return $event->command['type'] === 'clone_repo'
+                && $event->command['payload']['url'] === 'https://github.com/user/repo.git'
+                && $event->command['payload']['directory'] === 'repo';
+        });
     });
 
     it('requires authentication', function () {
@@ -213,8 +148,7 @@ describe('Browser → Chief Command Relay', function () {
     });
 
     it('accepts command with empty payload', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupOnlineDevice($manager, $this->device);
+        Event::fake([ChiefCommandDispatched::class]);
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -228,7 +162,7 @@ describe('Browser → Chief Command Relay', function () {
             ]);
     });
 
-    it('returns 404 for non-existent device', function () {
+    it('returns 403 for non-existent device', function () {
         $response = $this->actingAs($this->user)
             ->postJson('/ws/command/99999', [
                 'type' => 'start_run',
@@ -243,33 +177,6 @@ describe('Chief → Browser Message Broadcasting', function () {
     it('broadcasts ChiefMessageReceived event on incoming chief message', function () {
         Event::fake([ChiefMessageReceived::class]);
 
-        $manager = app(ServerConnectionManager::class);
-        $connectionId = 100;
-        $token = generateRelayTestAccessToken($this->device);
-
-        $manager->handleHello($connectionId, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'chief_version' => '0.5.0',
-            'device_name' => 'test-device',
-            'os' => 'linux',
-            'arch' => 'amd64',
-            'access_token' => $token,
-        ]);
-
-        // Simulate the controller handling a message from chief
-        $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-        $connection->shouldReceive('id')->andReturn($connectionId);
-        $connection->shouldReceive('withMaxMessageSize')->andReturn($connection);
-        $connection->shouldReceive('onMessage')->andReturn($connection);
-        $connection->shouldReceive('onClose')->andReturn($connection);
-        $connection->shouldReceive('openBuffer')->andReturn(null);
-        $connection->shouldReceive('send')->andReturn(null);
-
-        $manager->registerConnectionObject($connectionId, $connection);
-
-        // Directly call the ChiefServerController's handleMessage logic
-        // by dispatching the event as the controller would
         $message = [
             'type' => 'run_progress',
             'payload' => [
@@ -356,8 +263,7 @@ describe('Chief → Browser Message Broadcasting', function () {
 
 describe('Message Format and Validation', function () {
     it('passes through command with JSON type and payload', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupOnlineDevice($manager, $this->device);
+        Event::fake([ChiefCommandDispatched::class]);
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -380,15 +286,15 @@ describe('Message Format and Validation', function () {
 
         // Should still work as Laravel handles form data
         // The validation will pass since type is present
-        $response->assertStatus(503); // Device offline, but format was accepted
+        // Device is online, so broadcast will fire — assert 200
+        $response->assertOk();
     });
 });
 
 describe('Offline Device Handling', function () {
-    it('returns server offline for disconnected device', function () {
-        $manager = app(ServerConnectionManager::class);
+    it('returns server offline for device with is_online false', function () {
+        $this->device->update(['is_online' => false]);
 
-        // Device is not registered in connection manager
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
                 'type' => 'start_run',
@@ -402,29 +308,12 @@ describe('Offline Device Handling', function () {
             ]);
     });
 
-    it('returns server offline after device disconnects', function () {
-        $manager = app(ServerConnectionManager::class);
-        $connectionId = $this->device->id * 1000;
-        $token = generateRelayTestAccessToken($this->device);
+    it('returns server offline after device marked offline', function () {
+        // Device starts online via factory
+        expect($this->device->is_online)->toBeTrue();
 
-        $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-        $connection->shouldReceive('send')->andReturn(null);
-
-        Event::fake();
-
-        $manager->handleHello($connectionId, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'chief_version' => '0.5.0',
-            'device_name' => 'test-device',
-            'os' => 'linux',
-            'arch' => 'amd64',
-            'access_token' => $token,
-        ]);
-        $manager->registerConnectionObject($connectionId, $connection);
-
-        // Disconnect the device
-        $manager->handleDisconnect($connectionId);
+        // Mark offline (simulates disconnect)
+        $this->device->update(['is_online' => false]);
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -434,166 +323,71 @@ describe('Offline Device Handling', function () {
 
         $response->assertStatus(503);
     });
+
+    it('does not dispatch broadcast when device is offline', function () {
+        Event::fake([ChiefCommandDispatched::class]);
+
+        $this->device->update(['is_online' => false]);
+
+        $this->actingAs($this->user)
+            ->postJson("/ws/command/{$this->device->id}", [
+                'type' => 'start_run',
+                'payload' => [],
+            ]);
+
+        Event::assertNotDispatched(ChiefCommandDispatched::class);
+    });
 });
 
-describe('ServerConnectionManager Message Sending', function () {
-    it('sends message to device via connection object', function () {
-        $manager = new ServerConnectionManager;
-        $sentMessages = [];
-        $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-        $connection->shouldReceive('send')->andReturnUsing(function ($msg) use (&$sentMessages) {
-            $sentMessages[] = json_decode($msg, true);
+describe('Broadcast Dispatch', function () {
+    it('dispatches ChiefCommandDispatched with correct device and user', function () {
+        Event::fake([ChiefCommandDispatched::class]);
+
+        $this->actingAs($this->user)
+            ->postJson("/ws/command/{$this->device->id}", [
+                'type' => 'start_run',
+                'payload' => ['project_slug' => 'test'],
+            ]);
+
+        Event::assertDispatched(ChiefCommandDispatched::class, function ($event) {
+            return $event->deviceId === $this->device->id
+                && $event->userId === $this->user->id;
         });
-
-        Event::fake();
-
-        $token = generateRelayTestAccessToken($this->device);
-        $manager->handleHello(1, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'chief_version' => '0.5.0',
-            'device_name' => 'test-device',
-            'os' => 'linux',
-            'arch' => 'amd64',
-            'access_token' => $token,
-        ]);
-
-        $manager->registerConnectionObject(1, $connection);
-
-        $result = $manager->sendToDevice($this->device->id, [
-            'type' => 'start_run',
-            'payload' => ['project_slug' => 'test'],
-        ]);
-
-        expect($result)->toBeTrue();
-
-        // First message was welcome, second is our command
-        $lastMessage = end($sentMessages);
-        expect($lastMessage['type'])->toBe('start_run');
-        expect($lastMessage['payload']['project_slug'])->toBe('test');
     });
 
-    it('returns false for offline device', function () {
-        $manager = new ServerConnectionManager;
+    it('dispatches broadcast with full command structure', function () {
+        Event::fake([ChiefCommandDispatched::class]);
 
-        $result = $manager->sendToDevice(999, [
-            'type' => 'start_run',
-            'payload' => [],
-        ]);
+        $this->actingAs($this->user)
+            ->postJson("/ws/command/{$this->device->id}", [
+                'type' => 'update_settings',
+                'payload' => ['max_iterations' => 5],
+            ]);
 
-        expect($result)->toBeFalse();
+        Event::assertDispatched(ChiefCommandDispatched::class, function ($event) {
+            return $event->command['type'] === 'update_settings'
+                && $event->command['payload']['max_iterations'] === 5;
+        });
     });
 
-    it('checks device online status correctly', function () {
-        $manager = new ServerConnectionManager;
-        $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-        $connection->shouldReceive('send')->andReturn(null);
+    it('dispatches broadcast with empty payload', function () {
+        Event::fake([ChiefCommandDispatched::class]);
 
-        Event::fake();
+        $this->actingAs($this->user)
+            ->postJson("/ws/command/{$this->device->id}", [
+                'type' => 'pause_run',
+            ]);
 
-        expect($manager->isDeviceOnline($this->device->id))->toBeFalse();
-
-        $token = generateRelayTestAccessToken($this->device);
-        $manager->handleHello(1, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'chief_version' => '0.5.0',
-            'device_name' => 'test-device',
-            'os' => 'linux',
-            'arch' => 'amd64',
-            'access_token' => $token,
-        ]);
-
-        // After hello but before registering connection object
-        expect($manager->isDeviceOnline($this->device->id))->toBeFalse();
-
-        $manager->registerConnectionObject(1, $connection);
-        expect($manager->isDeviceOnline($this->device->id))->toBeTrue();
-    });
-
-    it('cleans up connection objects on disconnect', function () {
-        $manager = new ServerConnectionManager;
-        $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-        $connection->shouldReceive('send')->andReturn(null);
-
-        Event::fake();
-
-        $token = generateRelayTestAccessToken($this->device);
-        $manager->handleHello(1, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'chief_version' => '0.5.0',
-            'device_name' => 'test-device',
-            'os' => 'linux',
-            'arch' => 'amd64',
-            'access_token' => $token,
-        ]);
-
-        $manager->registerConnectionObject(1, $connection);
-        expect($manager->isDeviceOnline($this->device->id))->toBeTrue();
-
-        $manager->handleDisconnect(1);
-        expect($manager->isDeviceOnline($this->device->id))->toBeFalse();
-    });
-
-    it('cleans up connection objects on device deauthorization', function () {
-        $manager = new ServerConnectionManager;
-        $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-        $connection->shouldReceive('send')->andReturn(null);
-
-        Event::fake();
-
-        $token = generateRelayTestAccessToken($this->device);
-        $manager->handleHello(1, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'chief_version' => '0.5.0',
-            'device_name' => 'test-device',
-            'os' => 'linux',
-            'arch' => 'amd64',
-            'access_token' => $token,
-        ]);
-
-        $manager->registerConnectionObject(1, $connection);
-        expect($manager->isDeviceOnline($this->device->id))->toBeTrue();
-
-        $manager->disconnectDevice($this->device->id);
-        expect($manager->isDeviceOnline($this->device->id))->toBeFalse();
-    });
-
-    it('handles send failure gracefully', function () {
-        $manager = new ServerConnectionManager;
-        $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-        $connection->shouldReceive('send')->andThrow(new \RuntimeException('Connection lost'));
-
-        Event::fake();
-
-        $token = generateRelayTestAccessToken($this->device);
-        $manager->handleHello(1, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'chief_version' => '0.5.0',
-            'device_name' => 'test-device',
-            'os' => 'linux',
-            'arch' => 'amd64',
-            'access_token' => $token,
-        ]);
-
-        $manager->registerConnectionObject(1, $connection);
-
-        $result = $manager->sendToDevice($this->device->id, [
-            'type' => 'start_run',
-            'payload' => [],
-        ]);
-
-        expect($result)->toBeFalse();
+        Event::assertDispatched(ChiefCommandDispatched::class, function ($event) {
+            return $event->command['type'] === 'pause_run'
+                && $event->command['payload'] === [];
+        });
     });
 });
 
 describe('Rate Limiting', function () {
     it('enforces 60 commands per minute rate limit', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupOnlineDevice($manager, $this->device);
+        Event::fake([ChiefCommandDispatched::class]);
 
         // Send 60 requests — all should succeed
         for ($i = 0; $i < 60; $i++) {
@@ -617,8 +411,7 @@ describe('Rate Limiting', function () {
     });
 
     it('includes rate limit headers in response', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupOnlineDevice($manager, $this->device);
+        Event::fake([ChiefCommandDispatched::class]);
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -683,31 +476,5 @@ describe('ChiefMessageReceived Event', function () {
             return $event->message['code'] === 'RATE_LIMITED'
                 && $event->message['retry_after'] === 5;
         });
-    });
-});
-
-describe('Malformed Messages', function () {
-    it('logs and discards invalid JSON from chief', function () {
-        // This is tested in ServerConnectionTest but verify the
-        // controller doesn't crash on malformed messages
-        $manager = app(ServerConnectionManager::class);
-        $connectionId = 100;
-        $token = generateRelayTestAccessToken($this->device);
-
-        Event::fake();
-
-        $manager->handleHello($connectionId, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'chief_version' => '0.5.0',
-            'device_name' => 'test-device',
-            'os' => 'linux',
-            'arch' => 'amd64',
-            'access_token' => $token,
-        ]);
-
-        // The ChiefServerController handles invalid JSON by logging and returning
-        // This verifies the connection manager doesn't crash
-        expect($manager->isAuthenticated($connectionId))->toBeTrue();
     });
 });

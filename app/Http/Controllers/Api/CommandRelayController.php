@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\ChiefCommandDispatched;
 use App\Http\Controllers\Controller;
+use App\Models\DeviceAuthorization;
 use App\Services\PrdSessionManager;
-use App\Services\ServerConnectionManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -34,12 +35,11 @@ class CommandRelayController extends Controller
     ];
 
     public function __construct(
-        protected ServerConnectionManager $connectionManager,
         protected PrdSessionManager $sessionManager,
     ) {}
 
     /**
-     * Relay a command from the browser to a chief server via WebSocket.
+     * Relay a command from the browser to a chief server via broadcast.
      */
     public function send(Request $request, int $deviceId): JsonResponse
     {
@@ -92,29 +92,22 @@ class CommandRelayController extends Controller
             ], 403);
         }
 
-        // Check if the device is online
-        if (! $this->connectionManager->isDeviceOnline($deviceId)) {
+        // Check if the device is online via database
+        if (! DeviceAuthorization::where('id', $deviceId)->where('is_online', true)->exists()) {
             return response()->json([
                 'error' => 'server_offline',
                 'message' => 'Server offline',
             ], 503);
         }
 
-        // Build the message to send to chief
+        // Build the command to send to chief
         $message = [
             'type' => $type,
             'payload' => $payload,
         ];
 
-        // Send the message via WebSocket
-        $sent = $this->connectionManager->sendToDevice($deviceId, $message);
-
-        if (! $sent) {
-            return response()->json([
-                'error' => 'send_failed',
-                'message' => 'Failed to send command to server.',
-            ], 502);
-        }
+        // Broadcast the command via Reverb (Pusher protocol)
+        broadcast(new ChiefCommandDispatched($deviceId, $request->user()->id, $message));
 
         // Track PRD session activity
         $this->trackPrdSession($type, $payload, $deviceId, $request->user()->id);
