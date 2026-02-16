@@ -106,6 +106,9 @@ class MessageIngestionController extends Controller
             }
         }
 
+        // Update heartbeat timestamp — message ingestion acts as implicit heartbeat
+        $device->update(['last_heartbeat_at' => now()]);
+
         // Process each message
         $accepted = 0;
         foreach ($messages as $message) {

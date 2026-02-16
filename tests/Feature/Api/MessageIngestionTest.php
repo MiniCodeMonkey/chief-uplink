@@ -167,6 +167,35 @@ test('project_state message updates cached project state', function () {
 
 /*
 |--------------------------------------------------------------------------
+| Implicit heartbeat
+|--------------------------------------------------------------------------
+*/
+
+test('message ingestion updates last_heartbeat_at as implicit heartbeat', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    // Set heartbeat to a known past time
+    $pastTime = now()->subMinutes(5);
+    $this->device->update(['last_heartbeat_at' => $pastTime]);
+
+    $token = generateIngestionToken($this->device);
+    $batchId = Str::uuid()->toString();
+
+    $this->postJson('/api/device/messages', [
+        'batch_id' => $batchId,
+        'messages' => [
+            ['type' => 'claude_output', 'id' => 'msg-1', 'payload' => ['text' => 'Hello']],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ])->assertOk();
+
+    $this->device->refresh();
+    expect($this->device->last_heartbeat_at)->toBeGreaterThan($pastTime);
+});
+
+/*
+|--------------------------------------------------------------------------
 | Idempotent retry (batch deduplication)
 |--------------------------------------------------------------------------
 */
