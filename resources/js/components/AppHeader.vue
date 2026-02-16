@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { usePage } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
+import { ArrowLeft } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import BreadcrumbPicker from '@/components/BreadcrumbPicker.vue';
 import ConnectionStatusIndicator from '@/components/ConnectionStatusIndicator.vue';
@@ -16,6 +17,7 @@ import { getInitials } from '@/composables/useInitials';
 
 defineProps<{
     currentProjectSlug?: string;
+    showBack?: boolean;
 }>();
 
 const page = usePage();
@@ -27,8 +29,21 @@ const showShortcuts = ref(false);
 <template>
     <header class="border-b border-border">
         <div class="flex h-14 items-center justify-between px-4">
-            <!-- Left: Breadcrumb picker -->
-            <BreadcrumbPicker :current-project-slug="currentProjectSlug" />
+            <!-- Left: Mobile back arrow (when showBack) + Breadcrumb picker -->
+            <div class="flex items-center gap-1">
+                <Link
+                    v-if="showBack"
+                    href="/dashboard"
+                    class="focus-ring -ml-1 mr-1 flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors duration-[var(--duration-micro)] hover:bg-accent hover:text-foreground lg:hidden"
+                    aria-label="Back to dashboard"
+                    style="min-width: 44px; min-height: 44px"
+                >
+                    <ArrowLeft class="size-5" />
+                </Link>
+                <BreadcrumbPicker
+                    :current-project-slug="currentProjectSlug"
+                />
+            </div>
 
             <!-- Right: Connection status + User avatar dropdown -->
             <div class="flex items-center gap-2">

@@ -5,8 +5,8 @@ use App\Http\Controllers\Api\MessageBufferController;
 use App\Http\Controllers\Auth\DeviceCodeEntryController;
 use App\Http\Controllers\Auth\EmailCaptureController;
 use App\Http\Controllers\Auth\GitHubAuthController;
+use App\Http\Controllers\ProjectController;
 use App\Http\Middleware\EnsureEmailProvided;
-use App\Models\CachedProjectState;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -44,41 +44,11 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
     Route::post('/oauth/device/authorize', [DeviceCodeEntryController::class, 'authorize'])->name('oauth.device.authorize');
     Route::post('/oauth/device/deny', [DeviceCodeEntryController::class, 'deny'])->name('oauth.device.deny');
 
-    Route::get('/projects/{slug}', function (string $slug) {
-        $project = CachedProjectState::where('project_slug', $slug)->firstOrFail();
-
-        return Inertia::render('projects/Overview', [
-            'projectSlug' => $project->project_slug,
-            'projectName' => $project->project_name,
-        ]);
-    })->name('projects.overview');
-
-    Route::get('/projects/{slug}/run', function (string $slug) {
-        $project = CachedProjectState::where('project_slug', $slug)->firstOrFail();
-
-        return Inertia::render('projects/Run', [
-            'projectSlug' => $project->project_slug,
-            'projectName' => $project->project_name,
-        ]);
-    })->name('projects.run');
-
-    Route::get('/projects/{slug}/diffs', function (string $slug) {
-        $project = CachedProjectState::where('project_slug', $slug)->firstOrFail();
-
-        return Inertia::render('projects/Diffs', [
-            'projectSlug' => $project->project_slug,
-            'projectName' => $project->project_name,
-        ]);
-    })->name('projects.diffs');
-
-    Route::get('/projects/{slug}/prds', function (string $slug) {
-        $project = CachedProjectState::where('project_slug', $slug)->firstOrFail();
-
-        return Inertia::render('projects/Prds', [
-            'projectSlug' => $project->project_slug,
-            'projectName' => $project->project_name,
-        ]);
-    })->name('projects.prds');
+    Route::get('/projects/{slug}', [ProjectController::class, 'overview'])->name('projects.overview');
+    Route::get('/projects/{slug}/run', [ProjectController::class, 'run'])->name('projects.run');
+    Route::get('/projects/{slug}/diffs', [ProjectController::class, 'diffs'])->name('projects.diffs');
+    Route::get('/projects/{slug}/prds', [ProjectController::class, 'prds'])->name('projects.prds');
+    Route::get('/projects/{slug}/settings', [ProjectController::class, 'settings'])->name('projects.settings');
 
     // WebSocket message buffer replay (for browser reconnection)
     Route::post('/ws/buffer/replay', [MessageBufferController::class, 'replay'])->name('ws.buffer.replay');

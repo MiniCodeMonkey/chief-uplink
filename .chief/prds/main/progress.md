@@ -717,5 +717,78 @@
   - Card staggered animation: CSS `animation` with `animationDelay` via `:style` binding (not transition groups) for entrance effects
   - Desktop hover action buttons: use `opacity-0 group-hover:opacity-100` with absolute positioning to avoid layout shifts
   - The `useConnectionStatus` composable's `isOnline` reflects the currently selected device — use it for disabling actions
+- Dashboard offline state: dismissible banner uses `ref(false)` for `offlineBannerDismissed` — resets per page load (persistent per session)
+- `useConnectionStatus` provides `isOffline`, `isNeverConnected`, `selectedDevice`, `statusText` — use all of these for offline UI states
+- Desktop hover action buttons and mobile long-press menu hidden when server is not online (not just disabled)
+- Card muting: `opacity-70` class on cards when `serverNotLive` (covers offline, reconnecting, never-connected)
+- Project routes use `ProjectController` — scoped to user via `whereHas('deviceAuthorization', user_id)` — returns 404 for other users' projects
+- All project tabs (Overview, Run, Diffs, PRDs, Settings) are deep-linkable URLs at `/projects/{slug}/*`
+- AppHeader `showBack` prop adds mobile-only back arrow (lg:hidden) — used by ProjectLayout for project detail views
+
+---
+
+## 2026-02-16 - US-019
+- What was implemented:
+  - Dashboard offline state: renders cached project cards from `cached_project_state` when server is offline
+  - Offline banner at top of dashboard: "Server offline — showing last known state from [time]", dismissible via X button
+  - Banner uses `<Transition>` for smooth enter/leave animation
+  - Project cards show last-known status with muted styling (`opacity-70`) when server is not online
+  - Action buttons disabled: "+ New" dropdown button disabled with "Server offline" tooltip when not online
+  - Clone Repository and New Project items in dropdown were already disabled (from US-018) — kept as-is
+  - Desktop hover action buttons (Pause/Stop) hidden when server is offline (not just disabled)
+  - Mobile long-press handler prevents long-press when server is offline — no context menu shown
+  - Mobile long-press hint icon (... icon) hidden when server offline
+  - Never-connected empty state: shows Monitor icon with "Server has never connected" title and "Run `chief serve`..." instructions
+  - StatusDot and statusText shown in the never-connected empty state
+  - Smooth transitions: banner dismisses via Transition, shimmer on reconnect (existing from US-017)
+  - 10 comprehensive tests: offline rendering, cached data preservation, all statuses, story progress, never-connected state, reconnecting state, online→offline→online transitions
+  - All 276 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - resources/js/pages/Dashboard.vue (updated: added offline banner, muted card styling, disabled actions, never-connected empty state)
+  - tests/Feature/Dashboard/DashboardOfflineStateTest.php (new: 10 tests)
+  - .chief/prds/main/prd.json (updated: US-019 passes: true)
+- **Learnings for future iterations:**
+  - Dashboard already had `isOnline` from `useConnectionStatus` for disabling dropdown items — extend by also using `isOffline`, `isNeverConnected`, `selectedDevice`, `statusText`
+  - `offlineBannerDismissed` is a simple ref — resets when navigating away and back (per-session dismissal, not persisted)
+  - Use `serverNotLive` computed (which is `!isOnline`) to cover all non-online states (offline, reconnecting, never-connected) for muting/disabling
+  - `handleLongPressStart` was updated to take `status` parameter and guard against offline — prevents opening context menu for running projects when offline
+  - The never-connected empty state is only shown when the device has no projects AND is never-connected — if it has cached projects, show them with offline banner instead
+  - DeviceAuthorization factory `offline()` state sets `last_connected_at` to a past date; for never-connected, create with `last_connected_at: null`
+
+---
+
+## 2026-02-16 - US-020
+- What was implemented:
+  - Project Detail Layout with tabbed navigation (Overview, Run, Diffs, PRDs, Settings)
+  - `ProjectController` consolidates all project route closures into a proper controller with user-scoped access control
+  - Controller uses `whereHas('deviceAuthorization')` to scope projects to the authenticated user — returns 404 for other users' projects
+  - Settings tab added: `/projects/{slug}/settings` route with placeholder page
+  - Mobile overflow menu: three-dot "More" button in bottom tab bar with Settings option in popup menu
+  - Overflow menu has backdrop for dismissal, smooth enter/leave transitions
+  - Mobile back arrow: AppHeader accepts `showBack` prop, renders `ArrowLeft` icon link to dashboard (visible only on mobile, hidden lg+)
+  - Back arrow has 44x44px minimum touch target for accessibility
+  - Desktop: all 5 tabs visible in top tab bar (Overview, Run, Diffs, PRDs, Settings)
+  - Active tab highlighted with accent-colored underline (primary color)
+  - Tab content area fills remaining viewport height with flex-1
+  - All tabs are deep-linkable (each has its own URL)
+  - Default tab is Overview at `/projects/{slug}`
+  - 12 comprehensive tests covering: all tab routes (5), deep-linkable URLs, access control (404 for non-existent, 404 for other user, auth redirect, revoked device access, 404 for sub-routes), named routes
+  - All 288 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - app/Http/Controllers/ProjectController.php (new: consolidated project routes with user-scoped access)
+  - routes/web.php (updated: replaced route closures with ProjectController, added settings route)
+  - resources/js/components/ProjectTabBar.vue (updated: added Settings in mobile overflow menu, desktop tab bar)
+  - resources/js/components/AppHeader.vue (updated: added showBack prop with mobile back arrow)
+  - resources/js/layouts/ProjectLayout.vue (updated: passes showBack to AppHeader, flex-1 on content)
+  - resources/js/pages/projects/Settings.vue (new: placeholder settings page)
+  - tests/Feature/Projects/ProjectDetailLayoutTest.php (new: 12 tests)
+  - .chief/prds/main/prd.json (updated: US-020 passes: true)
+- **Learnings for future iterations:**
+  - Project routes use `ProjectController` with `findProject()` helper — scopes via `whereHas('deviceAuthorization', user_id)` for security
+  - The old route closures used `CachedProjectState::where('project_slug', $slug)->firstOrFail()` without user scoping — the controller adds proper access control
+  - AppHeader `showBack` prop is boolean — only renders mobile back arrow when true (used by ProjectLayout, not AppLayout)
+  - Mobile overflow menu uses `<Transition>` with backdrop for dismissal — same pattern as other dropdown menus in the app
+  - `router.visit(href)` from Inertia is used for programmatic navigation from overflow menu (can't use `<Link>` inside a button click handler easily)
+  - Desktop shows all 5 tabs including Settings; mobile shows 4 primary tabs + "More" overflow with Settings
 
 ---

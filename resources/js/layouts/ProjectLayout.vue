@@ -14,10 +14,10 @@ const props = defineProps<{
 
 <template>
     <div class="flex min-h-screen w-full flex-col">
-        <AppHeader :current-project-slug="props.projectSlug" />
+        <AppHeader :current-project-slug="props.projectSlug" show-back />
         <DeviceStatusBanner />
         <ProjectTabBar :project-slug="props.projectSlug" />
-        <AppContent class="pb-16 lg:pb-0">
+        <AppContent class="flex-1 pb-16 lg:pb-0">
             <slot />
         </AppContent>
     </div>
