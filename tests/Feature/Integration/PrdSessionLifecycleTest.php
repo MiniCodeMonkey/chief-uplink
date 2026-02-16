@@ -1,5 +1,6 @@
 <?php
 
+use App\Events\ChiefCommandDispatched;
 use App\Events\ChiefMessageReceived;
 use App\Models\DeviceAuthorization;
 use App\Models\User;
@@ -214,7 +215,7 @@ describe('PRD Session Close', function () {
 
 describe('PRD Session Timeout', function () {
     it('detects expiring sessions and sends timeout warnings', function () {
-        Event::fake([ChiefMessageReceived::class]);
+        Event::fake([ChiefMessageReceived::class, ChiefCommandDispatched::class]);
 
         // Set a very short timeout for testing
         config(['websocket.prd_session_timeout' => 60]); // 1 minute
@@ -236,7 +237,7 @@ describe('PRD Session Timeout', function () {
     });
 
     it('expires sessions that have timed out', function () {
-        Event::fake([ChiefMessageReceived::class]);
+        Event::fake([ChiefMessageReceived::class, ChiefCommandDispatched::class]);
 
         config(['websocket.prd_session_timeout' => 1]); // 1 second
         $sessionManager = new PrdSessionManager;
@@ -258,6 +259,83 @@ describe('PRD Session Timeout', function () {
         Event::assertDispatched(ChiefMessageReceived::class, function ($event) use ($sessionId) {
             return $event->message['type'] === 'session_expired'
                 && $event->message['session_id'] === $sessionId;
+        });
+    });
+
+    it('dispatches ChiefCommandDispatched for expired sessions', function () {
+        Event::fake([ChiefMessageReceived::class, ChiefCommandDispatched::class]);
+
+        config(['websocket.prd_session_timeout' => 1]); // 1 second
+        $sessionManager = new PrdSessionManager;
+
+        $sessionId = 'expire-broadcast-test-'.uniqid();
+        $sessionManager->registerSession($sessionId, $this->device->id, $this->user->id);
+
+        // Backdate the activity to trigger expiration
+        Redis::hset("prd:session:{$sessionId}", 'last_activity_at', (string) (time() - 10));
+        Redis::zadd('prd:sessions:expiring', time() - 10, $sessionId);
+
+        $sessionManager->checkTimeouts();
+
+        Event::assertDispatched(ChiefCommandDispatched::class, function ($event) use ($sessionId) {
+            return $event->command['type'] === 'session_expired'
+                && $event->command['session_id'] === $sessionId
+                && $event->deviceId === $this->device->id
+                && $event->userId === $this->user->id;
+        });
+    });
+
+    it('dispatches ChiefCommandDispatched for timeout warnings', function () {
+        Event::fake([ChiefMessageReceived::class, ChiefCommandDispatched::class]);
+
+        // Set timeout so the session is within the 10-minute warning window
+        config(['websocket.prd_session_timeout' => 600]); // 10 minutes
+        $sessionManager = new PrdSessionManager;
+
+        $sessionId = 'warning-broadcast-test-'.uniqid();
+        $sessionManager->registerSession($sessionId, $this->device->id, $this->user->id);
+
+        // Backdate activity so remaining time is ~5 minutes (within 10-minute warning)
+        Redis::hset("prd:session:{$sessionId}", 'last_activity_at', (string) (time() - 300));
+        Redis::zadd('prd:sessions:expiring', time() + 300, $sessionId);
+
+        $result = $sessionManager->checkTimeouts();
+
+        expect($result['warnings'])->toBe(1);
+
+        Event::assertDispatched(ChiefCommandDispatched::class, function ($event) use ($sessionId) {
+            return $event->command['type'] === 'session_timeout_warning'
+                && $event->command['session_id'] === $sessionId
+                && $event->deviceId === $this->device->id
+                && $event->userId === $this->user->id
+                && isset($event->command['minutes_remaining']);
+        });
+    });
+
+    it('broadcasts both browser and CLI events for timeout warnings', function () {
+        Event::fake([ChiefMessageReceived::class, ChiefCommandDispatched::class]);
+
+        config(['websocket.prd_session_timeout' => 600]); // 10 minutes
+        $sessionManager = new PrdSessionManager;
+
+        $sessionId = 'dual-broadcast-test-'.uniqid();
+        $sessionManager->registerSession($sessionId, $this->device->id, $this->user->id);
+
+        // Backdate to within warning window
+        Redis::hset("prd:session:{$sessionId}", 'last_activity_at', (string) (time() - 300));
+        Redis::zadd('prd:sessions:expiring', time() + 300, $sessionId);
+
+        $sessionManager->checkTimeouts();
+
+        // Both events should be dispatched with matching data
+        Event::assertDispatched(ChiefMessageReceived::class, function ($event) use ($sessionId) {
+            return $event->message['type'] === 'session_timeout_warning'
+                && $event->message['session_id'] === $sessionId;
+        });
+
+        Event::assertDispatched(ChiefCommandDispatched::class, function ($event) use ($sessionId) {
+            return $event->command['type'] === 'session_timeout_warning'
+                && $event->command['session_id'] === $sessionId;
         });
     });
 });

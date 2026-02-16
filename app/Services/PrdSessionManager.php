@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\ChiefCommandDispatched;
 use App\Events\ChiefMessageReceived;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
@@ -215,14 +216,24 @@ class PrdSessionManager
      */
     protected function sendTimeoutWarning(string $sessionId, array $session, int $minutesRemaining): void
     {
+        $message = [
+            'type' => 'session_timeout_warning',
+            'session_id' => $sessionId,
+            'minutes_remaining' => $minutesRemaining,
+        ];
+
+        // Notify browser
         ChiefMessageReceived::dispatch(
             $session['device_id'],
             $session['user_id'],
-            [
-                'type' => 'session_timeout_warning',
-                'session_id' => $sessionId,
-                'minutes_remaining' => $minutesRemaining,
-            ]
+            $message,
+        );
+
+        // Notify CLI via Pusher channel
+        ChiefCommandDispatched::dispatch(
+            $session['device_id'],
+            $session['user_id'],
+            $message,
         );
 
         Log::debug('PRD session timeout warning sent', [
@@ -238,13 +249,23 @@ class PrdSessionManager
      */
     protected function expireSession(string $sessionId, array $session): void
     {
+        $message = [
+            'type' => 'session_expired',
+            'session_id' => $sessionId,
+        ];
+
+        // Notify browser
         ChiefMessageReceived::dispatch(
             $session['device_id'],
             $session['user_id'],
-            [
-                'type' => 'session_expired',
-                'session_id' => $sessionId,
-            ]
+            $message,
+        );
+
+        // Notify CLI via Pusher channel
+        ChiefCommandDispatched::dispatch(
+            $session['device_id'],
+            $session['user_id'],
+            $message,
         );
 
         $this->closeSession($sessionId);
