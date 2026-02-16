@@ -86,6 +86,8 @@
 - PRD refinement route planned: `/projects/{slug}/prd/{id}/refine` — will reuse PrdChat.vue with `mode: 'refine'` prop
 - PRD chat WebSocket events: `prd_output` (streaming), `prd_response_complete` (Claude done), `session_timeout_warning`, `session_expired`
 - PRD chat session flow: first message sends `new_prd` to create session, subsequent messages use `prd_message` with session_id
+- PRD preview panel: `PrdPreviewPanel.vue` renders markdown-it output, shows "Live" indicator during streaming, auto-scrolls to follow content
+- PrdChat has side-by-side layout (desktop) with resizable divider and mobile toggle ("Chat"/"Preview") — `prdContent` ref tracks latest Claude response
 
 ---
 
@@ -1080,5 +1082,39 @@
   - The `confirm()` dialog is used for back navigation (not ConfirmDialog component) since it's a simple yes/no with no form
   - `beforeunload` event handler: call `e.preventDefault()` to trigger browser's native "unsaved changes" dialog
   - PRD refinement route (`/projects/{slug}/prd/{id}/refine`) is planned for US-030 — same PrdChat component can be reused with `mode: 'refine'` prop
+
+---
+
+## 2026-02-16 - US-029
+- What was implemented:
+  - PRD Live Preview Panel alongside the PRD creation chat
+  - `PrdPreviewPanel` component: renders PRD markdown in real-time using `markdown-it` library with custom styling matching the app's design system
+  - Desktop: side-by-side layout — chat on left, PRD preview on right, with a resizable divider (drag to resize, clamped between 25%–75%)
+  - Resizable divider has a hover indicator (grip handle with two vertical lines) and highlights during drag
+  - Mobile: toggle button ("Chat" / "Preview") in header switches between full-screen chat and full-screen preview
+  - Preview toggle disabled when no preview content exists
+  - Preview renders the latest Claude response as the PRD document forming in real-time
+  - PRD content tracked via `prdContent` ref that accumulates from `prd_output` WebSocket events
+  - Preview shows "Live" indicator (pulsing radio icon + badge) while Claude is actively generating
+  - "Live" indicator uses smooth fade transition for appear/disappear
+  - Preview auto-scrolls to follow new content as it's generated, pauses when user scrolls up
+  - Preview empty state: "The PRD preview will appear here as Claude generates it."
+  - markdown-it configured with linkify and typographer for proper markdown rendering (headings, lists, code blocks, tables, blockquotes, links, etc.)
+  - Comprehensive CSS styling for all markdown elements in the preview panel matching the app's design system
+  - Layout changed from `min-h-screen` to `h-screen` for proper flex layout with side-by-side panels
+  - All 375 existing tests still passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - resources/js/components/PrdPreviewPanel.vue (new: PRD preview panel with markdown-it rendering, auto-scroll, Live indicator)
+  - resources/js/pages/projects/PrdChat.vue (updated: added side-by-side layout, resizable divider, mobile toggle, prdContent tracking, PrdPreviewPanel integration)
+  - .chief/prds/main/prd.json (updated: US-029 passes: true)
+- **Learnings for future iterations:**
+  - `markdown-it` is imported as `MarkdownIt` from `markdown-it` — no separate `@types/markdown-it` needed (types are included)
+  - markdown-it configured with `html: false` for security (prevents raw HTML injection), `linkify: true` for auto-linking URLs, `typographer: true` for smart quotes
+  - Resizable divider uses `mousedown`/`mousemove`/`mouseup` with percentage-based position — must clean up listeners in `onBeforeUnmount`
+  - Divider position clamped to 25%–75% to prevent panels from being too narrow
+  - Mobile view toggle uses `mobileView` ref with `'chat' | 'preview'` — controls `hidden lg:flex`/`hidden lg:block` CSS classes
+  - PRD content is the latest Claude message content (`getLatestClaudeContent()`) — updated on every `prd_output` chunk and on `prd_response_complete`
+  - The preview panel border-left on desktop provides visual separation alongside the divider
+  - `h-screen` instead of `min-h-screen` is needed for the side-by-side flex layout to work correctly with overflow
 
 ---

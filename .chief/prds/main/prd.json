@@ -565,7 +565,8 @@
         "Preview scrolls to follow new content as it's generated"
       ],
       "priority": 29,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-030",

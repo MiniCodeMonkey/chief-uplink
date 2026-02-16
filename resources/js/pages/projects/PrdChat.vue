@@ -4,11 +4,14 @@ import {
     ArrowDown,
     ArrowLeft,
     ChevronDown,
+    Eye,
     Loader2,
+    MessageSquare,
     Save,
     Send,
 } from 'lucide-vue-next';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import PrdPreviewPanel from '@/components/PrdPreviewPanel.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -52,6 +55,17 @@ const hasActiveSession = ref(false);
 const isSaving = ref(false);
 const saveAction = ref<'close' | 'run' | null>(null);
 
+// Preview state — accumulated PRD content from Claude messages
+const prdContent = ref('');
+
+// Mobile view toggle
+const mobileView = ref<'chat' | 'preview'>('chat');
+
+// Resizable divider state
+const dividerPosition = ref(50); // percentage
+const isDragging = ref(false);
+const containerRef = ref<HTMLElement | null>(null);
+
 // Refs for DOM elements
 const messagesContainer = ref<HTMLElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
@@ -69,6 +83,9 @@ function generateSessionId(): string {
 }
 
 const serverNotLive = computed(() => !isOnline.value);
+
+// Computed: has any preview content to show
+const hasPreviewContent = computed(() => prdContent.value.length > 0);
 
 // Text area auto-resize
 function adjustTextareaHeight() {
@@ -117,6 +134,29 @@ function focusInput() {
     nextTick(() => {
         textareaRef.value?.focus();
     });
+}
+
+// Resizable divider handlers
+function startDrag(e: MouseEvent) {
+    e.preventDefault();
+    isDragging.value = true;
+    document.addEventListener('mousemove', onDrag);
+    document.addEventListener('mouseup', stopDrag);
+}
+
+function onDrag(e: MouseEvent) {
+    if (!isDragging.value || !containerRef.value) return;
+    const rect = containerRef.value.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = (x / rect.width) * 100;
+    // Clamp between 25% and 75%
+    dividerPosition.value = Math.max(25, Math.min(75, percentage));
+}
+
+function stopDrag() {
+    isDragging.value = false;
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', stopDrag);
 }
 
 // Send a user message
@@ -276,6 +316,10 @@ onMounted(() => {
             lastMsg.content += text;
         }
 
+        // Update PRD preview content — accumulate the latest Claude response
+        // The PRD content is the latest Claude message being generated
+        prdContent.value = getLatestClaudeContent();
+
         if (!isAutoScrollPaused.value) {
             nextTick(() => scrollToBottom());
         }
@@ -293,6 +337,9 @@ onMounted(() => {
         if (lastMsg && lastMsg.role === 'claude') {
             lastMsg.isStreaming = false;
         }
+
+        // Update PRD content with final state
+        prdContent.value = getLatestClaudeContent();
 
         focusInput();
     });
@@ -314,6 +361,9 @@ onMounted(() => {
                 lastMsg.isStreaming = false;
             }
         }
+
+        // Update PRD content
+        prdContent.value = getLatestClaudeContent();
 
         focusInput();
     });
@@ -355,10 +405,20 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     window.removeEventListener('beforeunload', handleBeforeUnload);
+    // Clean up drag listeners
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', stopDrag);
 });
 
-// Simple markdown-like rendering for Claude messages
-// Uses the markdown-it library for proper rendering
+// Get the latest Claude message content for the PRD preview
+// Shows the most recent Claude response as the PRD being generated
+function getLatestClaudeContent(): string {
+    const claudeMessages = messages.value.filter((m) => m.role === 'claude' && m.content);
+    if (claudeMessages.length === 0) return '';
+    return claudeMessages[claudeMessages.length - 1].content;
+}
+
+// Simple markdown-like rendering for Claude messages in chat bubbles
 const renderedMarkdown = computed(() => {
     const cache = new Map<string, string>();
     return (content: string) => {
@@ -414,7 +474,7 @@ const saveButtonLabel = computed(() => {
 <template>
     <Head :title="`${props.projectName} — New PRD`" />
 
-    <div class="flex min-h-screen w-full flex-col bg-background">
+    <div class="flex h-screen w-full flex-col bg-background">
         <!-- Custom header for chat page (no tab bar) -->
         <header class="border-b border-border">
             <div class="flex h-14 items-center justify-between px-4">
@@ -431,6 +491,29 @@ const saveButtonLabel = computed(() => {
                     <div class="min-w-0">
                         <h1 class="truncate text-sm font-semibold">New PRD</h1>
                         <p class="truncate text-xs text-muted-foreground">{{ props.projectName }}</p>
+                    </div>
+                </div>
+
+                <!-- Center: Mobile view toggle -->
+                <div class="flex items-center lg:hidden">
+                    <div class="flex rounded-lg border border-border p-0.5">
+                        <button
+                            class="focus-ring rounded-md px-3 py-1 text-xs font-medium transition-colors duration-[var(--duration-micro)]"
+                            :class="mobileView === 'chat' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
+                            @click="mobileView = 'chat'"
+                        >
+                            <MessageSquare class="mr-1 inline-block size-3" />
+                            Chat
+                        </button>
+                        <button
+                            class="focus-ring rounded-md px-3 py-1 text-xs font-medium transition-colors duration-[var(--duration-micro)]"
+                            :class="mobileView === 'preview' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
+                            :disabled="!hasPreviewContent"
+                            @click="mobileView = 'preview'"
+                        >
+                            <Eye class="mr-1 inline-block size-3" />
+                            Preview
+                        </button>
                     </div>
                 </div>
 
@@ -464,145 +547,197 @@ const saveButtonLabel = computed(() => {
             </div>
         </header>
 
-        <!-- Chat messages area -->
+        <!-- Main content area -->
         <div
-            ref="messagesContainer"
-            class="flex-1 overflow-y-auto"
-            @scroll="handleScroll"
+            ref="containerRef"
+            class="relative flex min-h-0 flex-1"
         >
-            <div class="mx-auto max-w-3xl space-y-4 p-4">
-                <!-- Empty state -->
+            <!-- Chat panel -->
+            <div
+                class="flex flex-col"
+                :class="{
+                    'hidden lg:flex': mobileView === 'preview',
+                    'flex': mobileView === 'chat',
+                    'w-full lg:w-auto': true,
+                }"
+                :style="{ flexBasis: `${dividerPosition}%`, flexShrink: 0, flexGrow: 0 }"
+            >
+                <!-- Chat messages area -->
                 <div
-                    v-if="messages.length === 0"
-                    class="flex flex-col items-center justify-center py-24 text-center"
+                    ref="messagesContainer"
+                    class="flex-1 overflow-y-auto"
+                    @scroll="handleScroll"
                 >
-                    <div class="mb-4 rounded-full bg-primary/10 p-4">
-                        <Send class="size-8 text-primary" />
+                    <div class="mx-auto max-w-3xl space-y-4 p-4">
+                        <!-- Empty state -->
+                        <div
+                            v-if="messages.length === 0"
+                            class="flex flex-col items-center justify-center py-24 text-center"
+                        >
+                            <div class="mb-4 rounded-full bg-primary/10 p-4">
+                                <Send class="size-8 text-primary" />
+                            </div>
+                            <h2 class="text-lg font-semibold">Create a new PRD</h2>
+                            <p class="mt-2 max-w-sm text-sm text-muted-foreground">
+                                Describe what you want to build. Claude will help you create a detailed Product Requirements Document.
+                            </p>
+                        </div>
+
+                        <!-- Chat messages -->
+                        <TransitionGroup
+                            enter-active-class="transition-all duration-[var(--duration-standard)] ease-[var(--ease-gentle)]"
+                            enter-from-class="opacity-0 translate-y-2"
+                            enter-to-class="opacity-100 translate-y-0"
+                        >
+                            <div
+                                v-for="msg in messages"
+                                :key="msg.id"
+                                class="flex"
+                                :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+                            >
+                                <!-- User message -->
+                                <div
+                                    v-if="msg.role === 'user'"
+                                    class="max-w-[85%] rounded-2xl rounded-br-md bg-primary/10 px-4 py-2.5 text-sm text-foreground lg:max-w-[70%]"
+                                >
+                                    <p class="whitespace-pre-wrap break-words">{{ msg.content }}</p>
+                                </div>
+
+                                <!-- Claude message -->
+                                <div
+                                    v-else
+                                    class="max-w-[85%] rounded-2xl rounded-bl-md bg-surface px-4 py-2.5 text-sm text-foreground lg:max-w-[70%]"
+                                    :class="{ 'border border-border': true }"
+                                >
+                                    <!-- Streaming content -->
+                                    <div
+                                        v-if="msg.content"
+                                        class="prose-chat break-words"
+                                        v-html="renderedMarkdown(msg.content)"
+                                    />
+
+                                    <!-- Typing indicator (empty streaming message) -->
+                                    <div
+                                        v-if="msg.isStreaming && msg.content === ''"
+                                        class="flex items-center gap-1.5 py-1"
+                                    >
+                                        <span class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground" style="animation-delay: 0ms" />
+                                        <span class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground" style="animation-delay: 200ms" />
+                                        <span class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground" style="animation-delay: 400ms" />
+                                    </div>
+
+                                    <!-- Streaming cursor -->
+                                    <span
+                                        v-if="msg.isStreaming && msg.content !== ''"
+                                        class="inline-block h-4 w-0.5 animate-pulse bg-primary align-text-bottom"
+                                    />
+                                </div>
+                            </div>
+                        </TransitionGroup>
                     </div>
-                    <h2 class="text-lg font-semibold">Create a new PRD</h2>
-                    <p class="mt-2 max-w-sm text-sm text-muted-foreground">
-                        Describe what you want to build. Claude will help you create a detailed Product Requirements Document.
-                    </p>
                 </div>
 
-                <!-- Chat messages -->
-                <TransitionGroup
-                    enter-active-class="transition-all duration-[var(--duration-standard)] ease-[var(--ease-gentle)]"
+                <!-- New messages pill -->
+                <Transition
+                    enter-active-class="transition-all duration-[var(--duration-standard)] ease-[var(--ease-snappy)]"
                     enter-from-class="opacity-0 translate-y-2"
                     enter-to-class="opacity-100 translate-y-0"
+                    leave-active-class="transition-all duration-[var(--duration-micro)] ease-[var(--ease-snappy)]"
+                    leave-from-class="opacity-100 translate-y-0"
+                    leave-to-class="opacity-0 translate-y-2"
                 >
-                    <div
-                        v-for="msg in messages"
-                        :key="msg.id"
-                        class="flex"
-                        :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
-                    >
-                        <!-- User message -->
-                        <div
-                            v-if="msg.role === 'user'"
-                            class="max-w-[85%] rounded-2xl rounded-br-md bg-primary/10 px-4 py-2.5 text-sm text-foreground lg:max-w-[70%]"
-                        >
-                            <p class="whitespace-pre-wrap break-words">{{ msg.content }}</p>
-                        </div>
-
-                        <!-- Claude message -->
-                        <div
-                            v-else
-                            class="max-w-[85%] rounded-2xl rounded-bl-md bg-surface px-4 py-2.5 text-sm text-foreground lg:max-w-[70%]"
-                            :class="{ 'border border-border': true }"
-                        >
-                            <!-- Streaming content -->
-                            <div
-                                v-if="msg.content"
-                                class="prose-chat break-words"
-                                v-html="renderedMarkdown(msg.content)"
-                            />
-
-                            <!-- Typing indicator (empty streaming message) -->
-                            <div
-                                v-if="msg.isStreaming && msg.content === ''"
-                                class="flex items-center gap-1.5 py-1"
-                            >
-                                <span class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground" style="animation-delay: 0ms" />
-                                <span class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground" style="animation-delay: 200ms" />
-                                <span class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground" style="animation-delay: 400ms" />
-                            </div>
-
-                            <!-- Streaming cursor -->
-                            <span
-                                v-if="msg.isStreaming && msg.content !== ''"
-                                class="inline-block h-4 w-0.5 animate-pulse bg-primary align-text-bottom"
-                            />
-                        </div>
-                    </div>
-                </TransitionGroup>
-            </div>
-        </div>
-
-        <!-- New messages pill -->
-        <Transition
-            enter-active-class="transition-all duration-[var(--duration-standard)] ease-[var(--ease-snappy)]"
-            enter-from-class="opacity-0 translate-y-2"
-            enter-to-class="opacity-100 translate-y-0"
-            leave-active-class="transition-all duration-[var(--duration-micro)] ease-[var(--ease-snappy)]"
-            leave-from-class="opacity-100 translate-y-0"
-            leave-to-class="opacity-0 translate-y-2"
-        >
-            <button
-                v-if="isAutoScrollPaused && messages.length > 0"
-                class="focus-ring fixed bottom-24 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground shadow-lg transition-colors hover:bg-primary/90"
-                @click="jumpToBottom"
-            >
-                <ArrowDown class="mr-1 inline-block size-3" />
-                New messages
-            </button>
-        </Transition>
-
-        <!-- Input area (pinned to bottom) -->
-        <div class="border-t border-border bg-background">
-            <div class="mx-auto flex max-w-3xl items-end gap-2 p-4">
-                <div class="relative flex-1">
-                    <textarea
-                        ref="textareaRef"
-                        v-model="userInput"
-                        :disabled="isSaving || serverNotLive"
-                        class="focus-ring w-full resize-none rounded-xl border border-border bg-surface px-4 py-3 pr-12 text-sm text-foreground placeholder-muted-foreground transition-colors duration-[var(--duration-micro)] focus:border-primary disabled:cursor-not-allowed disabled:opacity-50 lg:pr-4"
-                        :class="{ 'opacity-50': isClaudeResponding }"
-                        placeholder="Describe what you want to build..."
-                        rows="1"
-                        style="overflow-y: hidden"
-                        @keydown="handleKeydown"
-                    />
-
-                    <!-- Mobile send button (inside textarea) -->
                     <button
-                        class="focus-ring absolute bottom-2 right-2 flex items-center justify-center rounded-lg bg-primary p-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 lg:hidden"
-                        :disabled="!userInput.trim() || isClaudeResponding || isSaving || serverNotLive"
-                        aria-label="Send message"
-                        @click="handleSend"
+                        v-if="isAutoScrollPaused && messages.length > 0"
+                        class="focus-ring absolute bottom-24 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground shadow-lg transition-colors hover:bg-primary/90 lg:left-auto lg:translate-x-0"
+                        :style="{ left: `${dividerPosition / 2}%` }"
+                        @click="jumpToBottom"
                     >
-                        <Send class="size-4" />
+                        <ArrowDown class="mr-1 inline-block size-3" />
+                        New messages
                     </button>
-                </div>
+                </Transition>
 
-                <!-- Desktop send button -->
-                <Button
-                    class="hidden lg:flex"
-                    :disabled="!userInput.trim() || isClaudeResponding || isSaving || serverNotLive"
-                    @click="handleSend"
-                >
-                    <Send class="size-4" />
-                    Send
-                </Button>
+                <!-- Input area (pinned to bottom) -->
+                <div class="border-t border-border bg-background">
+                    <div class="mx-auto flex max-w-3xl items-end gap-2 p-4">
+                        <div class="relative flex-1">
+                            <textarea
+                                ref="textareaRef"
+                                v-model="userInput"
+                                :disabled="isSaving || serverNotLive"
+                                class="focus-ring w-full resize-none rounded-xl border border-border bg-surface px-4 py-3 pr-12 text-sm text-foreground placeholder-muted-foreground transition-colors duration-[var(--duration-micro)] focus:border-primary disabled:cursor-not-allowed disabled:opacity-50 lg:pr-4"
+                                :class="{ 'opacity-50': isClaudeResponding }"
+                                placeholder="Describe what you want to build..."
+                                rows="1"
+                                style="overflow-y: hidden"
+                                @keydown="handleKeydown"
+                            />
+
+                            <!-- Mobile send button (inside textarea) -->
+                            <button
+                                class="focus-ring absolute bottom-2 right-2 flex items-center justify-center rounded-lg bg-primary p-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 lg:hidden"
+                                :disabled="!userInput.trim() || isClaudeResponding || isSaving || serverNotLive"
+                                aria-label="Send message"
+                                @click="handleSend"
+                            >
+                                <Send class="size-4" />
+                            </button>
+                        </div>
+
+                        <!-- Desktop send button -->
+                        <Button
+                            class="hidden lg:flex"
+                            :disabled="!userInput.trim() || isClaudeResponding || isSaving || serverNotLive"
+                            @click="handleSend"
+                        >
+                            <Send class="size-4" />
+                            Send
+                        </Button>
+                    </div>
+
+                    <!-- Helper text -->
+                    <div class="mx-auto max-w-3xl px-4 pb-3">
+                        <p class="text-[10px] text-muted-foreground">
+                            <span class="hidden lg:inline">Press Enter to send, Shift+Enter for new line.</span>
+                            <span v-if="serverNotLive" class="text-destructive"> Server offline — messages cannot be sent.</span>
+                            <span v-else-if="isClaudeResponding" class="text-primary"> Claude is thinking...</span>
+                        </p>
+                    </div>
+                </div>
             </div>
 
-            <!-- Helper text -->
-            <div class="mx-auto max-w-3xl px-4 pb-3">
-                <p class="text-[10px] text-muted-foreground">
-                    <span class="hidden lg:inline">Press Enter to send, Shift+Enter for new line.</span>
-                    <span v-if="serverNotLive" class="text-destructive"> Server offline — messages cannot be sent.</span>
-                    <span v-else-if="isClaudeResponding" class="text-primary"> Claude is thinking...</span>
-                </p>
+            <!-- Resizable divider (desktop only) -->
+            <div
+                class="hidden lg:flex group relative z-10 w-0 cursor-col-resize items-center justify-center"
+                @mousedown="startDrag"
+            >
+                <div
+                    class="h-full w-px bg-border transition-colors duration-[var(--duration-micro)] group-hover:bg-primary/50"
+                    :class="{ 'bg-primary': isDragging }"
+                />
+                <div
+                    class="absolute flex h-8 w-4 items-center justify-center rounded-full border border-border bg-background opacity-0 transition-opacity duration-[var(--duration-standard)] group-hover:opacity-100"
+                    :class="{ 'opacity-100': isDragging }"
+                >
+                    <div class="flex gap-px">
+                        <div class="h-3 w-px rounded-full bg-muted-foreground" />
+                        <div class="h-3 w-px rounded-full bg-muted-foreground" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview panel -->
+            <div
+                class="flex-1 border-l border-border bg-background"
+                :class="{
+                    'hidden lg:block': mobileView === 'chat',
+                    'block': mobileView === 'preview',
+                }"
+            >
+                <PrdPreviewPanel
+                    :content="prdContent"
+                    :is-generating="isClaudeResponding"
+                />
             </div>
         </div>
     </div>
@@ -641,5 +776,10 @@ const saveButtonLabel = computed(() => {
 /* Typing dots stagger animation */
 .animate-pulse {
     animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Prevent text selection while dragging the divider */
+.cursor-col-resize {
+    user-select: none;
 }
 </style>
