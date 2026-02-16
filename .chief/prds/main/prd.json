@@ -1003,8 +1003,8 @@
         "Warning is dismissible per-session (comes back on next login)"
       ],
       "priority": 51,
-      "passes": false,
-      "inProgress": true
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-052",

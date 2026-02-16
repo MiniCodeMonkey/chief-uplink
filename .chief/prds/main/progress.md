@@ -155,6 +155,8 @@
 - Long-press discoverability: use `useLongPressHint` composable — `showHint` computed, `markFeatureUsed()` on trigger
 - Page transitions: `usePageTransitions` composable tracks navigation direction — singleton initialized in `app.ts`
 - Always add `inputmode` alongside `type` for mobile inputs: `inputmode="email"`, `inputmode="url"`, `inputmode="numeric"`
+- Version compatibility: `useVersionCompatibility` composable provides `showWarning`, `dismiss()`, `isCompatible`; `isVersionCompatible()` standalone helper for template use
+- `config/chief.php` has `min_version` — the minimum Chief CLI version for full feature compatibility
 
 ---
 
@@ -1855,4 +1857,23 @@
   - Mobile fullscreen modal pattern: `max-sm:fixed max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:top-0 max-sm:left-0 max-sm:max-w-none max-sm:rounded-none max-sm:border-0 max-sm:h-full max-sm:w-full`
   - Dialog close button touch target: use `[data-slot='dialog-close']` CSS selector for minimum size enforcement on mobile
   - `inputmode` attribute is separate from `type` — both should be set for best mobile keyboard behavior
+---
+
+## 2026-02-16 - US-051
+- Implemented Chief Version Compatibility feature
+- Created `config/chief.php` with `min_version` config (default `0.5.0`)
+- Created `useVersionCompatibility` composable with semver comparison, session-scoped dismissal, and exported `isVersionCompatible()` helper
+- Created `VersionCompatibilityBanner.vue` — non-intrusive warning banner with dismiss button, shown on project detail pages via `ProjectLayout`
+- Updated `Devices.vue` (Settings → Devices) to show "Outdated" badge with tooltip next to version number for incompatible devices
+- Files changed:
+  - config/chief.php (new)
+  - resources/js/composables/useVersionCompatibility.ts (new)
+  - resources/js/components/VersionCompatibilityBanner.vue (new)
+  - resources/js/layouts/ProjectLayout.vue (modified)
+  - resources/js/pages/settings/Devices.vue (modified)
+- **Learnings for future iterations:**
+  - ESLint import order plugin sorts `@/components/ui/*` imports before `@/components/V*` — ui subdirectory components sort first
+  - `dismissedDeviceIds` uses module-scoped `ref(new Set())` for session-scoped state (persists across navigation, resets on page reload)
+  - `isVersionCompatible()` is exported as a standalone function (not just from composable) for use in non-composable contexts like template helpers
+  - `DeviceStatusBanner` pattern (Transition + conditional + role="status") is the established pattern for layout-level banners
 ---
