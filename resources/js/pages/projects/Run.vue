@@ -582,7 +582,7 @@ function scrollToOutput() {
                         v-else-if="!hasActiveRun && runHistory.length === 0"
                         :icon="Clock"
                         title="No runs yet"
-                        description="Start a run to begin executing your PRD stories."
+                        description="Create a PRD and start your first run."
                         class="py-12"
                     />
 

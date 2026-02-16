@@ -438,14 +438,22 @@ function navigateToActivityView(event: RecentActivity) {
                         <CardHeader class="pb-3">
                             <div class="flex items-center justify-between">
                                 <CardTitle class="text-base">Recent Runs</CardTitle>
+                                <button
+                                    v-if="recentRuns.length > 0"
+                                    class="text-xs text-primary hover:underline"
+                                    @click="navigateToRunTab"
+                                >
+                                    View all
+                                </button>
                             </div>
                         </CardHeader>
                         <CardContent>
                             <div v-if="recentRuns.length > 0" class="space-y-2">
-                                <div
+                                <button
                                     v-for="run in recentRuns"
                                     :key="run.id"
-                                    class="flex items-center gap-3 rounded-md border border-border px-3 py-2"
+                                    class="flex w-full items-center gap-3 rounded-md border border-border px-3 py-2 text-left transition-colors duration-[var(--duration-micro)] hover:bg-accent"
+                                    @click="navigateToRunTab"
                                 >
                                     <component
                                         :is="run.status === 'completed' ? CheckCircle2 : run.status === 'failed' ? XCircle : run.status === 'paused' ? CircleDot : Clock"
@@ -476,7 +484,7 @@ function navigateToActivityView(event: RecentActivity) {
                                             <span v-if="run.started_at">{{ formatRelativeTime(run.started_at) }}</span>
                                         </div>
                                     </div>
-                                </div>
+                                </button>
                             </div>
                             <p v-else class="py-4 text-center text-sm text-muted-foreground">
                                 No runs yet. Create a PRD and start your first run.

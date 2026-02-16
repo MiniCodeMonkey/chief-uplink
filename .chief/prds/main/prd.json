@@ -505,7 +505,7 @@
         "Skeleton loading state"
       ],
       "priority": 26,
-      "passes": false
+      "passes": true
     },
     {
       "id": "US-027",
