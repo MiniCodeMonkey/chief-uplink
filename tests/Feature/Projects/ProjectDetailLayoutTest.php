@@ -22,6 +22,8 @@ describe('Project Detail Routes', function () {
             ->component('projects/Overview')
             ->has('projectSlug')
             ->has('projectName')
+            ->has('project')
+            ->has('recentRuns')
             ->where('projectSlug', 'test-project')
             ->where('projectName', 'Test Project')
         );
