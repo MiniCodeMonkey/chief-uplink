@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, useForm, usePage } from '@inertiajs/vue3';
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,19 @@ const denyForm = useForm({
 });
 
 const showSuccess = ref(false);
+
+// Keep form data in sync with props when Inertia reuses the component instance
+watch(() => props.confirmDevice, (device) => {
+    if (device) {
+        authorizeForm.user_code = device.user_code;
+        denyForm.user_code = device.user_code;
+    }
+}, { immediate: true });
+
+// Handle flash data arriving via Inertia prop updates (not just on mount)
+watch(successDevice, (val) => {
+    if (val) showSuccess.value = true;
+});
 
 function formatCode(value: string): string {
     // Remove anything that's not alphanumeric
