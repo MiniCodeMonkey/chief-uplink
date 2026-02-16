@@ -1719,3 +1719,25 @@
   - The docs pages reuse the same markdown CSS pattern as PrdPreviewPanel but with its own scoped styles for consistency
 
 ---
+
+## 2026-02-16 - US-047
+- What was implemented:
+  - Added missing rate limiters in `bootstrap/app.php`: `login-attempts` (5/IP/min), `general-api` (60/user/min), `clone-create-project` (10/user/hour), `account-deletion` (1/user/hour)
+  - Applied `throttle:login-attempts` to GitHub OAuth login routes in `routes/web.php`
+  - Applied `throttle:general-api` to all API routes (both public OAuth and device.auth groups) in `routes/api.php`
+  - Added clone/create project rate limiting (10/user/hour) in `CommandRelayController` for `clone_repo` and `create_project` commands, with proper 429 response, Retry-After header, and X-RateLimit headers
+  - Fixed account deletion rate limit from `throttle:1,60` (1 per 60 seconds) to `throttle:account-deletion` (1 per hour) in `routes/settings.php`
+- Files changed:
+  - `bootstrap/app.php` — added 4 new RateLimiter definitions
+  - `routes/web.php` — added throttle middleware to guest/login routes
+  - `routes/api.php` — wrapped all API routes in `throttle:general-api` group
+  - `routes/settings.php` — changed account deletion throttle to named limiter
+  - `app/Http/Controllers/Api/CommandRelayController.php` — added clone/create project rate limiting with RateLimiter facade
+  - `.chief/prds/main/prd.json` — marked US-047 as complete
+- **Learnings for future iterations:**
+  - Rate limiters already existed for: device-code (10/IP/15min), token-refresh (30/device/hour), device-code-entry (10/user/15min), browser-commands (60/user/min), cloud-deploy (5/user/hour), push-notifications (20/user/hour in job), email-notifications (10/user/day in job)
+  - Token polling 5-second interval is custom logic in DeviceOAuthController (not middleware-based)
+  - Clone/create project rate limiting requires in-controller check because these commands share the `/ws/command/{deviceId}` route with other commands
+  - Laravel's throttle middleware automatically provides X-RateLimit-Limit, X-RateLimit-Remaining, and Retry-After headers
+  - Pre-existing TypeScript errors exist in auth pages, docs, CloudDeploy, CloudServers — not related to backend changes
+---

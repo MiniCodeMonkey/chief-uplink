@@ -13,27 +13,29 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-// Device code request — CLI calls this to start the device flow
-Route::post('/oauth/device/code', [DeviceOAuthController::class, 'requestCode'])
-    ->middleware('throttle:device-code')
-    ->name('oauth.device.code');
+Route::middleware('throttle:general-api')->group(function () {
+    // Device code request — CLI calls this to start the device flow
+    Route::post('/oauth/device/code', [DeviceOAuthController::class, 'requestCode'])
+        ->middleware('throttle:device-code')
+        ->name('oauth.device.code');
 
-// Token polling — CLI polls this to check if device code was approved
-Route::post('/oauth/device/token', [DeviceOAuthController::class, 'pollToken'])
-    ->name('oauth.device.token');
+    // Token polling — CLI polls this to check if device code was approved
+    Route::post('/oauth/device/token', [DeviceOAuthController::class, 'pollToken'])
+        ->name('oauth.device.token');
 
-// Token refresh — CLI uses this to get a new access token
-Route::post('/oauth/token', [DeviceOAuthController::class, 'refreshToken'])
-    ->middleware('throttle:token-refresh')
-    ->name('oauth.token');
+    // Token refresh — CLI uses this to get a new access token
+    Route::post('/oauth/token', [DeviceOAuthController::class, 'refreshToken'])
+        ->middleware('throttle:token-refresh')
+        ->name('oauth.token');
 
-// Token revocation — CLI uses this to revoke its tokens
-Route::post('/oauth/revoke', [DeviceOAuthController::class, 'revokeToken'])
-    ->name('oauth.revoke');
+    // Token revocation — CLI uses this to revoke its tokens
+    Route::post('/oauth/revoke', [DeviceOAuthController::class, 'revokeToken'])
+        ->name('oauth.revoke');
 
-// Setup token exchange — VPS uses this to auto-authenticate
-Route::post('/oauth/device/exchange', [DeviceOAuthController::class, 'exchangeSetupToken'])
-    ->name('oauth.device.exchange');
+    // Setup token exchange — VPS uses this to auto-authenticate
+    Route::post('/oauth/device/exchange', [DeviceOAuthController::class, 'exchangeSetupToken'])
+        ->name('oauth.device.exchange');
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -46,7 +48,7 @@ Route::post('/oauth/device/exchange', [DeviceOAuthController::class, 'exchangeSe
 |
 */
 
-Route::middleware('device.auth')->group(function () {
+Route::middleware(['device.auth', 'throttle:general-api'])->group(function () {
     Route::get('/device/status', function (\Illuminate\Http\Request $request) {
         return response()->json([
             'authenticated' => true,

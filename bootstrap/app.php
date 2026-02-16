@@ -56,9 +56,29 @@ return Application::configure(basePath: dirname(__DIR__))
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
 
+        // Login attempts: 5 per IP per minute
+        RateLimiter::for('login-attempts', function (Request $request) {
+            return Limit::perMinute(5)->by($request->ip());
+        });
+
+        // General API endpoints: 60 per user per minute
+        RateLimiter::for('general-api', function (Request $request) {
+            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // Clone/create project: 10 per user per hour
+        RateLimiter::for('clone-create-project', function (Request $request) {
+            return Limit::perHour(10)->by($request->user()?->id ?: $request->ip());
+        });
+
         // Cloud deploy: 5 per user per hour
         RateLimiter::for('cloud-deploy', function (Request $request) {
             return Limit::perHour(5)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // Account deletion: 1 per user per hour
+        RateLimiter::for('account-deletion', function (Request $request) {
+            return Limit::perHour(1)->by($request->user()?->id ?: $request->ip());
         });
 
         // Push notifications: 20 per user per hour (enforced in SendPushNotification job)

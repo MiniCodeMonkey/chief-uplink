@@ -17,7 +17,7 @@ Route::get('/', function () {
 })->name('home');
 
 // GitHub OAuth routes
-Route::middleware('guest')->group(function () {
+Route::middleware(['guest', 'throttle:login-attempts'])->group(function () {
     Route::get('login', [GitHubAuthController::class, 'login'])->name('login');
     Route::get('auth/github', [GitHubAuthController::class, 'redirect'])->name('auth.github');
     Route::get('auth/github/callback', [GitHubAuthController::class, 'callback'])->name('auth.github.callback');

@@ -8,6 +8,7 @@ use App\Services\ServerConnectionManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 
 class CommandRelayController extends Controller
 {
@@ -56,6 +57,25 @@ class CommandRelayController extends Controller
                 'error' => 'invalid_command',
                 'message' => "Unknown command type: {$type}",
             ], 422);
+        }
+
+        // Clone/create project commands have a stricter rate limit: 10 per user per hour
+        if (in_array($type, ['clone_repo', 'create_project'], true)) {
+            $key = 'clone-create-project:'.$request->user()->id;
+            if (RateLimiter::tooManyAttempts($key, 10)) {
+                $retryAfter = RateLimiter::availableIn($key);
+
+                return response()->json([
+                    'error' => 'rate_limited',
+                    'message' => 'Too many clone/create requests. Please try again later.',
+                    'retry_after' => $retryAfter,
+                ], 429)->withHeaders([
+                    'Retry-After' => $retryAfter,
+                    'X-RateLimit-Limit' => 10,
+                    'X-RateLimit-Remaining' => 0,
+                ]);
+            }
+            RateLimiter::hit($key, 3600);
         }
 
         // Verify the user owns this device and it's not revoked

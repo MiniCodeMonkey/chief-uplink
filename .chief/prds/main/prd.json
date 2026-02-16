@@ -924,7 +924,8 @@
         "Rate limit status visible in response headers (X-RateLimit-Remaining, X-RateLimit-Limit)"
       ],
       "priority": 47,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-048",

@@ -16,7 +16,7 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('settings/profile', [ProfileController::class, 'destroy'])
-        ->middleware('throttle:1,60')
+        ->middleware('throttle:account-deletion')
         ->name('profile.destroy');
 
     Route::get('settings/devices', [DeviceController::class, 'index'])->name('devices.index');
