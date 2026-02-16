@@ -639,7 +639,8 @@
         "Loading indicator per-story while its diff is being fetched (inline spinner, not full-page)"
       ],
       "priority": 33,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-034",

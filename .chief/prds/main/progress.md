@@ -1210,3 +1210,34 @@
   - `saveStep` ref tracks the current step within a multi-step save action (saving vs starting) for granular button labels
   - The Save & Run flow navigates to the Run tab even on start_run failure — user can retry from there
 ---
+
+## 2026-02-16 - US-033
+- What was implemented:
+  - Diff Viewer tab showing per-story git diffs as collapsible accordion
+  - Each story header shows: status icon (checkmark/X), story title, story ID, file count, and total line changes (+N / -N) when diff is loaded
+  - Expanding a completed story fetches diff on demand via `get_diffs` WebSocket command (accepts story_id, returns scoped diff)
+  - Per-story loading state with skeleton placeholders and inline spinner on accordion header
+  - Per-story error state with retry button
+  - Diff file list shows: file icon, filename (monospace, truncated), per-file additions (+N green) and deletions (-N red)
+  - Summary footer per story: file count, total additions, total deletions
+  - Smooth accordion animation using CSS `grid-template-rows` transition (no janky JS height calc)
+  - Chevron icon rotates smoothly to indicate open/closed state
+  - Offline state: "Connect server to view diffs" with StatusDot indicator
+  - Empty state (no completed stories): "Diffs will appear here as stories are completed"
+  - Failed stories shown in list but disabled (no diff available)
+  - Staggered card entrance animation via TransitionGroup
+  - ProjectController updated: diffs method now passes `deviceId` and `storyDetails` props
+  - Re-fetches diff on device reconnection if accordion is expanded
+  - All 375 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - app/Http/Controllers/ProjectController.php (updated: diffs method now passes deviceId and storyDetails)
+  - resources/js/pages/projects/Diffs.vue (rewritten: full diff viewer with accordion, loading/empty/offline states)
+  - .chief/prds/main/prd.json (updated: US-033 passes: true)
+- **Learnings for future iterations:**
+  - Diffs are per-story, fetched on demand via `get_diffs` command — not pre-loaded or cached in web app
+  - CSS `grid-template-rows` transition (0fr → 1fr) gives smooth accordion expand/collapse without JS height calculations
+  - `storyDiffs` is a Record<string, StoryDiff> cache — once loaded, diffs persist across accordion toggles within the session
+  - Failed stories are displayed but with disabled accordion (no diffs available for failed stories)
+  - The `diffs_response` WebSocket message includes `project_slug` for filtering — important when multiple projects are open
+  - `loadingStoryId` ref tracks which story is currently being fetched — allows inline spinner on the correct accordion header
+---
