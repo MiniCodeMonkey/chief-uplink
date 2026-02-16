@@ -25,6 +25,11 @@ export type DeviceSummary = {
     connection_status: StatusDotState;
 };
 
+export type RecentActivity = {
+    event: string;
+    timestamp: string;
+};
+
 export type ProjectSummary = {
     id: number;
     device_authorization_id: number;
@@ -35,6 +40,8 @@ export type ProjectSummary = {
     current_prd_name: string | null;
     stories_completed: number | null;
     stories_total: number | null;
+    active_sessions: number | null;
+    recent_activity: RecentActivity[] | null;
 };
 
 export type ProjectTab = {

@@ -532,6 +532,9 @@
   - DeviceConnected/DeviceDisconnected events only broadcast to `private-user.{userId}` (not device channel) since browsers subscribe to user channels
   - Service providers must be explicitly listed in `bootstrap/providers.php` in Laravel 12 — auto-discovery only works for package providers
 - Broadcast auth route registered via `withBroadcasting()` in `bootstrap/app.php` (not `Broadcast::routes()` in web.php) — pass `['middleware' => ['web', 'auth']]` for authenticated channels
+- Connection status: `useConnectionStatus()` composable for reactive device status, `DeviceStatusBanner` component for header display
+- `project_state` WebSocket message type triggers `CachedProjectState` overwrite in `ChiefServerController::handleProjectState()`
+- `cached_project_state` NOT NULL integer columns (`stories_completed`, `stories_total`, `active_sessions`) have default 0 — use `?? 0` in upserts
 - Echo composables: `useEcho()` for channel subscriptions, `useEchoConnectionStatus()` for connection state, `useDeviceStatus()` for real-time device updates
 - Inertia lazy props (`fn () =>`) are resolved by Inertia — access in tests via `assertInertia(fn ($page) => $page->toArray()['props']['devices'])`
 
@@ -642,5 +645,77 @@
   - The `broadcastWith()` method returns both `type` and `message` — `type` is a convenience field for quick filtering in the frontend
   - Connection cleanup happens in three places: `handleDisconnect` (WebSocket close), `disconnectDevice` (deauthorization), and old connection replacement in `handleHello`
   - Unique test helper function names per file are required — `generateRelayTestAccessToken` in this file vs `generateTestAccessToken` in ServerConnectionTest
+
+---
+
+## 2026-02-15 - US-017
+- What was implemented:
+  - Connection status tracking with four states: Online (green), Reconnecting (yellow pulsing, <60s), Offline (gray, >60s), Never Connected (hollow)
+  - `useConnectionStatus` composable: reactive device connection status with relative time formatting (e.g., "2h ago", "5m ago", "just now")
+  - `DeviceStatusBanner` component: shows connection status with text below header for dashboard and project detail views
+  - Updated ServerDropdown: "Offline — last synced X ago" with relative time (was "Last seen [date]")
+  - Status banner visible in both AppLayout (dashboard) and ProjectLayout (project detail) headers
+  - Smooth animated transitions on DeviceStatusBanner appear/disappear
+  - Shimmer sweep animation (`shimmer-sweep` CSS class) for indicating fresh data on reconnect
+  - `useDeviceStatus` composable enhanced: tracks `recentlyReconnected` set of device IDs with auto-clear after 1.5s (for shimmer trigger)
+  - 2-second debounce before showing "Reconnecting" state (prevents flickering on brief network blips)
+  - 60-second timeout: reconnecting → offline transition
+  - `project_state` message handler in ChiefServerController: overwrites cached_project_state when server reconnects with fresh data
+  - Project state handler: adds new projects, updates existing projects, removes stale projects not reported by server
+  - 15 new tests: 9 for connection status states/display, 6 for project state cache overwrite
+  - All 251 tests passing, Pint clean, ESLint clean, build passing
+- Files changed:
+  - resources/js/composables/useConnectionStatus.ts (new: reactive connection status + relative time formatting)
+  - resources/js/components/DeviceStatusBanner.vue (new: status banner with animated transitions)
+  - resources/js/composables/useDeviceStatus.ts (updated: shimmer tracking for reconnect animation)
+  - resources/js/components/ServerDropdown.vue (updated: "Offline — last synced X ago" relative time)
+  - resources/js/layouts/AppLayout.vue (updated: added DeviceStatusBanner)
+  - resources/js/layouts/ProjectLayout.vue (updated: added DeviceStatusBanner)
+  - resources/css/app.css (updated: shimmer-sweep animation + reduced motion support)
+  - app/WebSocket/ChiefServerController.php (updated: project_state message handler for cache overwrite)
+  - .chief/prds/main/prd.json (updated: US-017 passes: true)
+  - tests/Feature/ConnectionStatus/ConnectionStatusTrackingTest.php (new: 15 tests)
+- **Learnings for future iterations:**
+  - `cached_project_state.stories_completed` and `stories_total` are NOT NULL with default 0 — use `?? 0` not `?? null` in upsert
+  - `formatRelativeTime()` is a standalone utility function exported from `useConnectionStatus` — can be imported independently
+  - DeviceStatusBanner uses `<Transition>` component for smooth enter/leave — hidden when device is online
+  - `recentlyReconnected` in `useDeviceStatus` is a reactive Set — Vue 3 ref wrapping a Set needs reassignment (`new Set(...)`) to trigger reactivity
+  - `shimmer-sweep` CSS class uses `::after` pseudo-element with `forwards` fill mode — animation runs once then holds transparent state
+  - `CachedProjectState::updateOrCreate` uses `['device_authorization_id', 'project_slug']` as the unique key — matches the DB unique index
+
+---
+
+## 2026-02-16 - US-018
+- What was implemented:
+  - Project Dashboard page showing project cards for the selected server
+  - Cards display: project name, status badge (Running/Idle/Error/Paused/No PRD), current PRD name + story progress with animated progress bar, last activity timestamp (relative), git branch name
+  - Active Claude sessions badge showing count when active
+  - Responsive grid layout: full-width stacked on mobile, 2-column on sm, 3-column on lg
+  - Entire card is clickable → navigates to project detail, with hover state (border brightens, subtle lift via translateY(-1px)) and active/pressed state (scale-down 0.98)
+  - Desktop: hover reveals action buttons (Pause, Stop) for running projects with fade-in animation, positioned top-right
+  - Mobile: long-press reveals context menu for quick actions (Pause Run, Stop Run) with bottom sheet style
+  - Subtle "..." icon on mobile for running projects as long-press discoverability hint
+  - "+ New" dropdown button in top actions area with "Clone Repository" and "New Project" options (disabled when server offline)
+  - Staggered card entrance animation (translateY + opacity, 50ms delay per card)
+  - Skeleton loading state with card-shaped shimmer placeholders (4 cards)
+  - Empty states: no devices ("Connect a device..."), no projects ("Clone a repository or create...")
+  - `active_sessions` and `recent_activity` fields added to Inertia shared device/project props
+  - `RecentActivity` type and enhanced `ProjectSummary` type with new fields
+  - Reduced motion support for card animations
+  - 15 comprehensive tests covering dashboard rendering, project data, all statuses, sessions, activity, scoping
+  - All 266 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - resources/js/pages/Dashboard.vue (rewritten: full project dashboard with cards, actions, animations)
+  - resources/js/types/navigation.ts (updated: added RecentActivity type, extended ProjectSummary)
+  - app/Http/Middleware/HandleInertiaRequests.php (updated: added active_sessions, recent_activity to project props)
+  - tests/Feature/Dashboard/ProjectDashboardTest.php (new: 15 tests)
+  - .chief/prds/main/prd.json (updated: US-018 passes: true)
+- **Learnings for future iterations:**
+  - CachedProjectState factory uses a fixed list of 8 project names — when creating multiple projects for the same device, specify unique `project_slug` values to avoid unique constraint violations
+  - Inertia lazy props (`fn () =>`) may be `undefined` on first render — use `computed(() => page.props.devices === undefined)` for loading state detection
+  - Long-press handlers on mobile: use `@touchstart`/`@touchend`/`@touchcancel` with `setTimeout(500ms)` for press detection
+  - Card staggered animation: CSS `animation` with `animationDelay` via `:style` binding (not transition groups) for entrance effects
+  - Desktop hover action buttons: use `opacity-0 group-hover:opacity-100` with absolute positioning to avoid layout shifts
+  - The `useConnectionStatus` composable's `isOnline` reflects the currently selected device — use it for disabling actions
 
 ---

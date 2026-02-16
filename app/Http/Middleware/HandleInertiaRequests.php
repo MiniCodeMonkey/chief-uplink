@@ -86,6 +86,8 @@ class HandleInertiaRequests extends Middleware
                             'current_prd_name' => $project->current_prd_name,
                             'stories_completed' => $project->stories_completed,
                             'stories_total' => $project->stories_total,
+                            'active_sessions' => $project->active_sessions,
+                            'recent_activity' => $project->recent_activity,
                         ];
                     })->toArray(),
                 ];

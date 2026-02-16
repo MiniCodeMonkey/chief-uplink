@@ -351,7 +351,8 @@
         "Skeleton loading state: card-shaped placeholders with shimmer animation while data loads"
       ],
       "priority": 18,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-019",
