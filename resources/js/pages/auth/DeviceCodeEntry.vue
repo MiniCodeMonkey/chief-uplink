@@ -243,6 +243,7 @@ onMounted(() => {
                                 spellcheck="false"
                                 maxlength="9"
                                 class="text-center font-mono text-2xl tracking-widest uppercase"
+                                :aria-invalid="!!verifyForm.errors.user_code"
                                 data-test="device-code-input"
                                 @input="onInput"
                                 @paste="onPaste"

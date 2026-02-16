@@ -10,6 +10,8 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -87,5 +89,29 @@ return Application::configure(basePath: dirname(__DIR__))
         });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->respond(function (Response $response, \Throwable $exception, Request $request) {
+            $status = $response->getStatusCode();
+
+            // Only render Inertia error pages for web requests with standard HTTP errors
+            if (! app()->environment(['local', 'testing'])
+                && in_array($status, [403, 404, 500, 503])
+                && ! $request->is('api/*')
+            ) {
+                return Inertia::render('Error', [
+                    'status' => $status,
+                ])->toResponse($request)->setStatusCode($status);
+            }
+
+            // In local/testing environment, render Inertia error for 404 only (let others show debug page)
+            if (app()->environment(['local', 'testing'])
+                && $status === 404
+                && ! $request->is('api/*')
+            ) {
+                return Inertia::render('Error', [
+                    'status' => $status,
+                ])->toResponse($request)->setStatusCode($status);
+            }
+
+            return $response;
+        });
     })->create();

@@ -90,6 +90,7 @@ function handleCancel() {
                                 v-model="form.username"
                                 type="text"
                                 :placeholder="user.github_username"
+                                :aria-invalid="!!form.errors.username"
                                 data-test="delete-username-input"
                             />
                             <InputError :message="form.errors.username" />

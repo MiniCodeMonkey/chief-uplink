@@ -24,6 +24,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import ToastContainer from '@/components/ui/toast/ToastContainer.vue';
 import { useChiefMessages } from '@/composables/useChiefMessages';
 import { useCommandRelay } from '@/composables/useCommandRelay';
 import { useConnectionStatus } from '@/composables/useConnectionStatus';
@@ -1117,6 +1118,8 @@ const saveButtonLabel = computed(() => {
             @confirm="executeSaveAndRun"
             @cancel="showRunConfirm = false"
         />
+
+        <ToastContainer />
     </div>
 </template>
 

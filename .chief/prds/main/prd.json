@@ -945,7 +945,8 @@
         "Errors are logged server-side for debugging"
       ],
       "priority": 48,
-      "passes": false
+      "passes": false,
+      "inProgress": true
     },
     {
       "id": "US-049",

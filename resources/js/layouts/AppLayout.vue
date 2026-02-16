@@ -5,10 +5,15 @@ import AppHeader from '@/components/AppHeader.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
 import DeviceStatusBanner from '@/components/DeviceStatusBanner.vue';
 import KeyboardShortcutsOverlay from '@/components/KeyboardShortcutsOverlay.vue';
+import ToastContainer from '@/components/ui/toast/ToastContainer.vue';
 import { useDeviceStatus } from '@/composables/useDeviceStatus';
+import { useFlashToasts } from '@/composables/useFlashToasts';
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
+import { useNetworkStatus } from '@/composables/useNetworkStatus';
 
 useDeviceStatus();
+useFlashToasts();
+useNetworkStatus();
 
 const showCommandPalette = ref(false);
 const showShortcutsOverlay = ref(false);
@@ -30,4 +35,5 @@ useKeyboardShortcuts({
 
     <CommandPalette v-model:open="showCommandPalette" />
     <KeyboardShortcutsOverlay v-model:open="showShortcutsOverlay" />
+    <ToastContainer />
 </template>

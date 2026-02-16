@@ -86,8 +86,9 @@ const memberSince = new Date(user.created_at).toLocaleDateString(undefined, {
                             required
                             autocomplete="name"
                             placeholder="Full name"
+                            :aria-invalid="!!errors.name"
                         />
-                        <InputError class="mt-2" :message="errors.name" />
+                        <InputError :message="errors.name" />
                     </div>
 
                     <div class="grid gap-2">
@@ -100,11 +101,12 @@ const memberSince = new Date(user.created_at).toLocaleDateString(undefined, {
                             :default-value="user.email ?? ''"
                             autocomplete="username"
                             placeholder="Email address"
+                            :aria-invalid="!!errors.email"
                         />
                         <p class="text-xs text-muted-foreground">
                             Used for notifications. Leave empty for push-only notifications.
                         </p>
-                        <InputError class="mt-2" :message="errors.email" />
+                        <InputError :message="errors.email" />
                     </div>
 
                     <div class="flex items-center gap-4">

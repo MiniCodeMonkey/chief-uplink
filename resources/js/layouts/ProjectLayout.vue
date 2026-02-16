@@ -6,10 +6,15 @@ import CommandPalette from '@/components/CommandPalette.vue';
 import DeviceStatusBanner from '@/components/DeviceStatusBanner.vue';
 import KeyboardShortcutsOverlay from '@/components/KeyboardShortcutsOverlay.vue';
 import ProjectTabBar from '@/components/ProjectTabBar.vue';
+import ToastContainer from '@/components/ui/toast/ToastContainer.vue';
 import { useDeviceStatus } from '@/composables/useDeviceStatus';
+import { useFlashToasts } from '@/composables/useFlashToasts';
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
+import { useNetworkStatus } from '@/composables/useNetworkStatus';
 
 useDeviceStatus();
+useFlashToasts();
+useNetworkStatus();
 
 const props = defineProps<{
     projectSlug: string;
@@ -36,4 +41,5 @@ useKeyboardShortcuts({
 
     <CommandPalette v-model:open="showCommandPalette" />
     <KeyboardShortcutsOverlay v-model:open="showShortcutsOverlay" />
+    <ToastContainer />
 </template>

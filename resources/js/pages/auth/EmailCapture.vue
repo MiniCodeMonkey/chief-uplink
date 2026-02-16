@@ -61,6 +61,7 @@ onMounted(() => {
                                 placeholder="you@example.com"
                                 autocomplete="email"
                                 required
+                                :aria-invalid="!!form.errors.email"
                                 data-test="email-capture-input"
                             />
                             <InputError :message="form.errors.email" />
