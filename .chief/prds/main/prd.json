@@ -881,7 +881,8 @@
         "Clean, minimal design — not overwhelming for a first-time user"
       ],
       "priority": 45,
-      "passes": false
+      "passes": false,
+      "inProgress": true
     },
     {
       "id": "US-046",

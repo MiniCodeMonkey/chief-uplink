@@ -17,6 +17,7 @@ import {
 import { computed, ref } from 'vue';
 import CloneRepositoryModal from '@/components/CloneRepositoryModal.vue';
 import CreateProjectModal from '@/components/CreateProjectModal.vue';
+import Onboarding from '@/components/Onboarding.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -67,6 +68,10 @@ const currentDevice = computed(() => {
 const projects = computed(() => currentDevice.value?.projects ?? []);
 
 const hasDevices = computed(() => devices.value.length > 0);
+
+const showOnboarding = computed(
+    () => page.props.showOnboarding as boolean,
+);
 
 const existingProjectNames = computed(() =>
     projects.value.map((p) => p.project_name),
@@ -333,7 +338,10 @@ const isLoading = computed(() => page.props.devices === undefined);
                 </div>
             </div>
 
-            <!-- Empty state: no devices -->
+            <!-- Onboarding: first-time user with no devices ever -->
+            <Onboarding v-else-if="showOnboarding && !hasDevices" />
+
+            <!-- Empty state: no devices (returning user who deauthorized all) -->
             <EmptyState
                 v-else-if="!hasDevices"
                 :icon="FolderPlus"

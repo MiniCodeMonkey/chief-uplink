@@ -48,6 +48,7 @@ class HandleInertiaRequests extends Middleware
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'devices' => fn () => $this->getDevices($request),
             'selectedDeviceId' => fn () => $this->getSelectedDeviceId($request),
+            'showOnboarding' => fn () => $this->shouldShowOnboarding($request),
         ];
     }
 
@@ -99,6 +100,17 @@ class HandleInertiaRequests extends Middleware
         $cookie = $request->cookie('selected_device_id');
 
         return $cookie ? (int) $cookie : null;
+    }
+
+    private function shouldShowOnboarding(Request $request): bool
+    {
+        $user = $request->user();
+        if (! $user) {
+            return false;
+        }
+
+        // Show onboarding only if user has never had any device authorized
+        return ! DeviceAuthorization::where('user_id', $user->id)->exists();
     }
 
     private function getConnectionStatus(DeviceAuthorization $device): string
