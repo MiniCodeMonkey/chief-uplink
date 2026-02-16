@@ -141,6 +141,11 @@
 - `KeyboardShortcutsOverlay` no longer has its own Escape handler — parent layout composable handles closing
 - Onboarding detection: `showOnboarding` shared Inertia prop checks `DeviceAuthorization::where('user_id', ...)->exists()` — includes revoked devices so onboarding is only shown for truly new users
 - Dashboard `v-else-if` chain order: isLoading → showOnboarding && !hasDevices → !hasDevices → showNeverConnectedEmpty → no projects → project cards
+- Error pages render via `Inertia::render('Error', ['status' => $code])` in `bootstrap/app.php` exception handler
+- `useFlashToasts` composable watches `page.props.flash.success` and `flash.error` and shows as toast — call once per layout
+- `useNetworkStatus` composable monitors `navigator.onLine` and browser online/offline events — shows toast notifications
+- ToastContainer must be mounted in each layout (AppLayout, ProjectLayout) and standalone pages (PrdChat) that use toasts
+- Input component has built-in `aria-invalid` styling — bind `:aria-invalid="!!form.errors.fieldName"` to show destructive border
 
 ---
 
@@ -1740,4 +1745,40 @@
   - Clone/create project rate limiting requires in-controller check because these commands share the `/ws/command/{deviceId}` route with other commands
   - Laravel's throttle middleware automatically provides X-RateLimit-Limit, X-RateLimit-Remaining, and Retry-After headers
   - Pre-existing TypeScript errors exist in auth pages, docs, CloudDeploy, CloudServers — not related to backend changes
+---
+
+## 2026-02-16 - US-048
+- What was implemented:
+  - Consistent error display patterns: inline errors for form fields (InputError with animation), toast notifications for transient errors, full-page error states for unrecoverable errors
+  - ToastContainer mounted globally in AppLayout and ProjectLayout (and PrdChat standalone page)
+  - Flash error support added to Inertia shared props (`flash.error` alongside existing `flash.success`)
+  - `useFlashToasts` composable watches Inertia flash props and displays them as toast notifications
+  - `useNetworkStatus` composable monitors browser online/offline state with toast notifications
+  - Error page (Error.vue) for 404, 403, 500, 503 status codes with consistent styling
+  - Inertia exception handler configured in bootstrap/app.php to render Error.vue for HTTP errors
+  - InputError component improved with Transition animation and `role="alert"` for accessibility
+  - Form validation inputs updated with `aria-invalid` binding across Profile, EmailCapture, DeviceCodeEntry, and DeleteUser forms — triggers Input component's built-in destructive border styling
+  - Tests for 404 rendering, flash message sharing, and form validation errors
+- Files changed:
+  - `resources/js/composables/useFlashToasts.ts` (new)
+  - `resources/js/composables/useNetworkStatus.ts` (new)
+  - `resources/js/pages/Error.vue` (new)
+  - `tests/Feature/ErrorHandlingTest.php` (new)
+  - `resources/js/layouts/AppLayout.vue` (added ToastContainer, useFlashToasts, useNetworkStatus)
+  - `resources/js/layouts/ProjectLayout.vue` (added ToastContainer, useFlashToasts, useNetworkStatus)
+  - `resources/js/pages/projects/PrdChat.vue` (added ToastContainer import)
+  - `resources/js/components/InputError.vue` (improved with animation and role="alert")
+  - `app/Http/Middleware/HandleInertiaRequests.php` (added flash.error)
+  - `bootstrap/app.php` (added exception handler for Inertia error pages)
+  - `resources/js/pages/settings/Profile.vue` (added aria-invalid to inputs)
+  - `resources/js/pages/auth/EmailCapture.vue` (added aria-invalid to input)
+  - `resources/js/pages/auth/DeviceCodeEntry.vue` (added aria-invalid to input)
+  - `resources/js/components/DeleteUser.vue` (added aria-invalid to input)
+- **Learnings for future iterations:**
+  - ToastContainer uses Teleport to body, so it works with any reactive toast state — but it must be mounted somewhere in the component tree
+  - Input component already has `aria-invalid` styling built in (`aria-invalid:border-destructive`) — just need to bind the attribute
+  - Inertia exception handling uses `$exceptions->respond()` in `withExceptions()` — not `render()` which is for non-Inertia responses
+  - Error pages should use minimal layouts (no AppLayout/ProjectLayout) since the user may not be authenticated
+  - Pre-existing TS errors exist in Echo, PushNotifications, TwoFactorAuth, and several auth pages — these are unrelated to changes
+  - `useFlashToasts` should only be called once per layout to avoid duplicate toast notifications
 ---
