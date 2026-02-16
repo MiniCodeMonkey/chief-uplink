@@ -5,7 +5,6 @@ use App\Events\ChiefMessageReceived;
 use App\Models\DeviceAuthorization;
 use App\Models\User;
 use App\Services\PrdSessionManager;
-use App\Services\ServerConnectionManager;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Redis;
 
@@ -30,44 +29,6 @@ afterEach(function () {
     }
 });
 
-function generatePrdTestAccessToken(DeviceAuthorization $device, int $expiresIn = 3600): string
-{
-    $payload = [
-        'sub' => $device->user_id,
-        'did' => $device->id,
-        'iat' => time(),
-        'exp' => time() + $expiresIn,
-    ];
-    $payloadJson = json_encode($payload);
-    $payloadBase64 = rtrim(strtr(base64_encode($payloadJson), '+/', '-_'), '=');
-    $signature = hash_hmac('sha256', $payloadBase64, config('app.key'));
-
-    return $payloadBase64.'.'.$signature;
-}
-
-function setupPrdOnlineDevice(ServerConnectionManager $manager, DeviceAuthorization $device): void
-{
-    $connectionId = $device->id * 1000;
-    $token = generatePrdTestAccessToken($device);
-
-    $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-    $connection->shouldReceive('send')->andReturn(null);
-
-    Event::fake();
-
-    $manager->handleHello($connectionId, [
-        'type' => 'hello',
-        'protocol_version' => 1,
-        'chief_version' => '0.5.0',
-        'device_name' => $device->device_name,
-        'os' => 'linux',
-        'arch' => 'amd64',
-        'access_token' => $token,
-    ]);
-
-    $manager->registerConnectionObject($connectionId, $connection);
-}
-
 /*
 |--------------------------------------------------------------------------
 | PRD Session Creation (new_prd command)
@@ -76,8 +37,7 @@ function setupPrdOnlineDevice(ServerConnectionManager $manager, DeviceAuthorizat
 
 describe('PRD Session Creation', function () {
     it('registers a PRD session when new_prd command is sent', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupPrdOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -102,8 +62,7 @@ describe('PRD Session Creation', function () {
     });
 
     it('returns session_timeout_remaining in response', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupPrdOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -137,8 +96,7 @@ describe('PRD Session Messages', function () {
         // Wait briefly and touch the session
         $initialRemaining = $this->sessionManager->getTimeRemaining($this->sessionId);
 
-        $manager = app(ServerConnectionManager::class);
-        setupPrdOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -158,8 +116,7 @@ describe('PRD Session Messages', function () {
             $this->sessionId, $this->device->id, $this->user->id
         );
 
-        $manager = app(ServerConnectionManager::class);
-        setupPrdOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -187,8 +144,7 @@ describe('PRD Session Close', function () {
             $this->sessionId, $this->device->id, $this->user->id
         );
 
-        $manager = app(ServerConnectionManager::class);
-        setupPrdOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [
@@ -348,8 +304,7 @@ describe('PRD Session Timeout', function () {
 
 describe('PRD Refinement Session', function () {
     it('registers a refinement session with prd_id when refine_prd command is sent', function () {
-        $manager = app(ServerConnectionManager::class);
-        setupPrdOnlineDevice($manager, $this->device);
+        Event::fake();
 
         $response = $this->actingAs($this->user)
             ->postJson("/ws/command/{$this->device->id}", [

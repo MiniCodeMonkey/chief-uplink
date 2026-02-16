@@ -4,7 +4,6 @@ use App\Models\DeviceAuthorization;
 use App\Models\OauthDeviceCode;
 use App\Models\ProviderApiKey;
 use App\Models\User;
-use App\Services\ServerConnectionManager;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
@@ -83,25 +82,7 @@ describe('Browser Command Rate Limiting', function () {
         $user = User::factory()->create();
         $device = DeviceAuthorization::factory()->for($user)->online()->create();
 
-        $manager = app(ServerConnectionManager::class);
-        $connectionId = $device->id * 1000;
-        $token = generateRateLimitAccessToken($device);
-
-        $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-        $connection->shouldReceive('send')->andReturn(null);
-
         Event::fake();
-
-        $manager->handleHello($connectionId, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'chief_version' => '0.5.0',
-            'device_name' => 'test',
-            'os' => 'linux',
-            'arch' => 'amd64',
-            'access_token' => $token,
-        ]);
-        $manager->registerConnectionObject($connectionId, $connection);
 
         for ($i = 0; $i < 60; $i++) {
             $this->actingAs($user)
@@ -124,25 +105,7 @@ describe('Browser Command Rate Limiting', function () {
         $user = User::factory()->create();
         $device = DeviceAuthorization::factory()->for($user)->online()->create();
 
-        $manager = app(ServerConnectionManager::class);
-        $connectionId = $device->id * 1000;
-        $token = generateRateLimitAccessToken($device);
-
-        $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-        $connection->shouldReceive('send')->andReturn(null);
-
         Event::fake();
-
-        $manager->handleHello($connectionId, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'chief_version' => '0.5.0',
-            'device_name' => 'test',
-            'os' => 'linux',
-            'arch' => 'amd64',
-            'access_token' => $token,
-        ]);
-        $manager->registerConnectionObject($connectionId, $connection);
 
         $response = $this->actingAs($user)
             ->postJson("/ws/command/{$device->id}", [
@@ -167,25 +130,7 @@ describe('Clone/Create Project Rate Limiting', function () {
         $user = User::factory()->create();
         $device = DeviceAuthorization::factory()->for($user)->online()->create();
 
-        $manager = app(ServerConnectionManager::class);
-        $connectionId = $device->id * 1000;
-        $token = generateRateLimitAccessToken($device);
-
-        $connection = Mockery::mock(\Laravel\Reverb\Servers\Reverb\Connection::class);
-        $connection->shouldReceive('send')->andReturn(null);
-
         Event::fake();
-
-        $manager->handleHello($connectionId, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'chief_version' => '0.5.0',
-            'device_name' => 'test',
-            'os' => 'linux',
-            'arch' => 'amd64',
-            'access_token' => $token,
-        ]);
-        $manager->registerConnectionObject($connectionId, $connection);
 
         for ($i = 0; $i < 10; $i++) {
             $this->actingAs($user)
@@ -309,18 +254,3 @@ describe('Rate Limit Response Format', function () {
         $response->assertHeader('Retry-After');
     });
 });
-
-function generateRateLimitAccessToken(DeviceAuthorization $device, int $expiresIn = 3600): string
-{
-    $payload = [
-        'sub' => $device->user_id,
-        'did' => $device->id,
-        'iat' => time(),
-        'exp' => time() + $expiresIn,
-    ];
-    $payloadJson = json_encode($payload);
-    $payloadBase64 = rtrim(strtr(base64_encode($payloadJson), '+/', '-_'), '=');
-    $signature = hash_hmac('sha256', $payloadBase64, config('app.key'));
-
-    return $payloadBase64.'.'.$signature;
-}

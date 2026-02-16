@@ -3,7 +3,6 @@
 use App\Models\DeviceAuthorization;
 use App\Models\User;
 use App\Services\WebSocketMessageBuffer;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Redis;
 
 beforeEach(function () {
@@ -366,121 +365,6 @@ describe('Stale Buffer Cleanup', function () {
         $cleaned = $this->buffer->cleanupStaleBuffers();
 
         expect($cleaned)->toBe(0);
-    });
-});
-
-describe('ServerConnectionManager Buffer Integration', function () {
-    it('generates session ID on successful hello', function () {
-        Event::fake();
-
-        $manager = new App\Services\ServerConnectionManager;
-        $token = generateBufferTestAccessToken($this->device);
-
-        $result = $manager->handleHello(1, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'access_token' => $token,
-        ]);
-
-        expect($result['success'])->toBeTrue();
-        expect($result['response'])->toHaveKey('session_id');
-        expect($result['response']['session_id'])->not->toBeNull();
-        expect($manager->getSessionId($this->device->id))->toBe($result['response']['session_id']);
-    });
-
-    it('buffers messages for authenticated devices', function () {
-        Event::fake();
-
-        $manager = new App\Services\ServerConnectionManager;
-        $token = generateBufferTestAccessToken($this->device);
-
-        $manager->handleHello(1, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'access_token' => $token,
-        ]);
-
-        $sessionId = $manager->getSessionId($this->device->id);
-
-        $result = $manager->bufferMessage($this->device->id, [
-            'type' => 'claude_output',
-            'payload' => ['text' => 'test output'],
-        ]);
-
-        expect($result)->toBeTrue();
-
-        // Verify the message was buffered
-        $buffer = app(WebSocketMessageBuffer::class);
-        $messages = $buffer->replay($this->device->id, $sessionId);
-        expect($messages)->toHaveCount(1);
-        expect($messages[0]['message']['type'])->toBe('claude_output');
-
-        // Cleanup
-        $buffer->flushDevice($this->device->id);
-    });
-
-    it('does not buffer for unauthenticated devices', function () {
-        $manager = new App\Services\ServerConnectionManager;
-
-        $result = $manager->bufferMessage(999, [
-            'type' => 'claude_output',
-            'payload' => ['text' => 'test'],
-        ]);
-
-        expect($result)->toBeFalse();
-    });
-
-    it('marks device disconnected in buffer on disconnect', function () {
-        Event::fake();
-
-        $manager = new App\Services\ServerConnectionManager;
-        $token = generateBufferTestAccessToken($this->device);
-
-        $manager->handleHello(1, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'access_token' => $token,
-        ]);
-
-        $manager->handleDisconnect(1);
-
-        $buffer = app(WebSocketMessageBuffer::class);
-        $timestamp = $buffer->getDisconnectTimestamp($this->device->id);
-        expect($timestamp)->not->toBeNull();
-        expect(abs($timestamp - time()))->toBeLessThanOrEqual(2);
-
-        // Cleanup
-        $buffer->flushDevice($this->device->id);
-    });
-
-    it('clears disconnect timestamp on reconnect', function () {
-        Event::fake();
-
-        $manager = new App\Services\ServerConnectionManager;
-        $token = generateBufferTestAccessToken($this->device);
-
-        // Connect, then disconnect
-        $manager->handleHello(1, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'access_token' => $token,
-        ]);
-        $manager->handleDisconnect(1);
-
-        $buffer = app(WebSocketMessageBuffer::class);
-        expect($buffer->getDisconnectTimestamp($this->device->id))->not->toBeNull();
-
-        // Reconnect
-        $manager->handleHello(2, [
-            'type' => 'hello',
-            'protocol_version' => 1,
-            'access_token' => $token,
-        ]);
-
-        expect($buffer->getDisconnectTimestamp($this->device->id))->toBeNull();
-
-        // Cleanup
-        $buffer->flushDevice($this->device->id);
     });
 });
 
