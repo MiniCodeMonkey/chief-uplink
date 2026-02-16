@@ -1121,7 +1121,8 @@
         "Dependency audit: composer audit and npm audit pass with no critical vulnerabilities"
       ],
       "priority": 56,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-057",

@@ -1992,3 +1992,34 @@
   - Use `waitForText`/`waitFor` before assertions to avoid flaky tests from page transition timing
   - `assertMissing` checks presence instantly — prefer `waitUntilMissing` for elements with exit animations
 ---
+
+### US-056 — Security Hardening ✅
+- **What was done:**
+  - Comprehensive security audit of the entire codebase
+  - Created `AddSecurityHeaders` middleware with Content-Security-Policy, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, and Permissions-Policy headers
+  - CSP uses per-request nonces (via `Vite::useCspNonce()`) for inline scripts and styles
+  - CSP allows: self, fonts.bunny.net, GitHub avatars, WebSocket connections (Reverb), and GitHub form actions
+  - Local development mode relaxes CSP to allow Vite HMR dev server connections
+  - Added `nonce` attributes to inline `<script>` and `<style>` tags in `app.blade.php`
+  - Registered middleware in `bootstrap/app.php` web stack
+  - Added `SESSION_SECURE_COOKIE=true` to `.env.example` for production HTTPS-only cookies
+  - Ran `composer audit` and `npm audit` — zero vulnerabilities found
+- **Audit findings (already secure):**
+  - CSRF: All web routes protected by default middleware
+  - XSS: `v-html` only used with controlled content, markdown-it configured with `html: false`
+  - SQL injection: All queries use Eloquent, one `orderByRaw` uses hardcoded values only
+  - Encryption: `ProviderApiKey` uses Laravel's `encrypted` cast; refresh tokens bcrypt-hashed
+  - Access tokens: 1hr TTL, HMAC-SHA256 signed, never stored in DB
+  - WebSocket auth: Channel authorization checks device ownership
+  - Session cookies: HttpOnly=true, SameSite=Lax by default
+  - `.gitignore`: Properly excludes `.env`, credentials, storage
+- **Files created:**
+  - app/Http/Middleware/AddSecurityHeaders.php — CSP and security headers middleware
+  - tests/Feature/SecurityHeadersTest.php — 14 tests validating all security headers
+- **Files modified:**
+  - bootstrap/app.php — Registered AddSecurityHeaders in web middleware stack
+  - resources/views/app.blade.php — Added nonce attributes to inline script and style tags
+  - .env.example — Added SESSION_SECURE_COOKIE=true
+  - .chief/prds/main/prd.json — US-056 passes=true, inProgress=false
+- **Test results:** 744 tests, 3856 assertions, all passing; Pint passes; both dependency audits clean
+---
