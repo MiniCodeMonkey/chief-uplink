@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { Monitor, Smartphone, Server } from 'lucide-vue-next';
+import { AlertTriangle, Monitor, Smartphone, Server } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import DeviceController from '@/actions/App/Http/Controllers/Settings/DeviceController';
 import Heading from '@/components/Heading.vue';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatusDot } from '@/components/ui/status-dot';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { isVersionCompatible } from '@/composables/useVersionCompatibility';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 
@@ -187,8 +190,21 @@ function formatOs(os: string | null): string {
                                     <span v-if="device.os">
                                         {{ formatOs(device.os) }}<span v-if="device.arch"> ({{ device.arch }})</span>
                                     </span>
-                                    <span v-if="device.chief_version">
+                                    <span v-if="device.chief_version" class="inline-flex items-center gap-1">
                                         Chief v{{ device.chief_version }}
+                                        <TooltipProvider v-if="!isVersionCompatible(device.chief_version)">
+                                            <Tooltip>
+                                                <TooltipTrigger as-child>
+                                                    <Badge variant="destructive" class="gap-0.5 px-1 py-0 text-[10px] leading-tight">
+                                                        <AlertTriangle class="size-2.5" />
+                                                        Outdated
+                                                    </Badge>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Requires Chief v0.5.0+. Some features may not work.</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
                                     </span>
                                     <span>
                                         Last seen {{ formatRelativeTime(device.last_connected_at) }}

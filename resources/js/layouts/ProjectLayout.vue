@@ -7,6 +7,7 @@ import DeviceStatusBanner from '@/components/DeviceStatusBanner.vue';
 import KeyboardShortcutsOverlay from '@/components/KeyboardShortcutsOverlay.vue';
 import ProjectTabBar from '@/components/ProjectTabBar.vue';
 import ToastContainer from '@/components/ui/toast/ToastContainer.vue';
+import VersionCompatibilityBanner from '@/components/VersionCompatibilityBanner.vue';
 import { useDeviceStatus } from '@/composables/useDeviceStatus';
 import { useFlashToasts } from '@/composables/useFlashToasts';
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
@@ -33,6 +34,7 @@ useKeyboardShortcuts({
     <div class="flex min-h-screen w-full flex-col">
         <AppHeader v-model:show-shortcuts="showShortcutsOverlay" :current-project-slug="props.projectSlug" show-back />
         <DeviceStatusBanner />
+        <VersionCompatibilityBanner />
         <ProjectTabBar :project-slug="props.projectSlug" />
         <AppContent class="flex-1 pb-16 lg:pb-0">
             <slot />
