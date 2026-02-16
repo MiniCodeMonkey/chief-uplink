@@ -16,7 +16,8 @@ export type CommandType =
     | 'get_diffs'
     | 'get_settings'
     | 'update_settings'
-    | 'get_prds';
+    | 'get_prds'
+    | 'refine_prd';
 
 interface CommandResponse {
     status: string;

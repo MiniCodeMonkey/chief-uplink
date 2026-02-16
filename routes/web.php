@@ -50,6 +50,7 @@ Route::middleware(['auth', EnsureEmailProvided::class])->group(function () {
     Route::get('/projects/{slug}/prds', [ProjectController::class, 'prds'])->name('projects.prds');
     Route::get('/projects/{slug}/settings', [ProjectController::class, 'settings'])->name('projects.settings');
     Route::get('/projects/{slug}/prd/new', [ProjectController::class, 'prdCreate'])->name('projects.prd.create');
+    Route::get('/projects/{slug}/prd/{prdId}/refine', [ProjectController::class, 'prdRefine'])->name('projects.prd.refine');
 
     // WebSocket message buffer replay (for browser reconnection)
     Route::post('/ws/buffer/replay', [MessageBufferController::class, 'replay'])->name('ws.buffer.replay');

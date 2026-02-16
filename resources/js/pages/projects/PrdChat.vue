@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import {
+    AlertTriangle,
     ArrowDown,
     ArrowLeft,
     ChevronDown,
@@ -38,7 +39,10 @@ const props = defineProps<{
     deviceId: number;
     mode: 'create' | 'refine';
     prdId?: string;
+    hasActiveRun?: boolean;
 }>();
+
+const isRefineMode = computed(() => props.mode === 'refine');
 
 useDeviceStatus();
 const { isOnline } = useConnectionStatus();
@@ -196,11 +200,22 @@ async function handleSend() {
         sessionId.value = generateSessionId();
         hasActiveSession.value = true;
 
-        await sendCommand(props.deviceId, 'new_prd', {
-            project_slug: props.projectSlug,
-            session_id: sessionId.value,
-            message: text,
-        });
+        if (isRefineMode.value && props.prdId) {
+            // Refine existing PRD
+            await sendCommand(props.deviceId, 'refine_prd', {
+                project_slug: props.projectSlug,
+                session_id: sessionId.value,
+                prd_id: props.prdId,
+                message: text,
+            });
+        } else {
+            // Create new PRD
+            await sendCommand(props.deviceId, 'new_prd', {
+                project_slug: props.projectSlug,
+                session_id: sessionId.value,
+                message: text,
+            });
+        }
     } else {
         // Subsequent message — send via prd_message
         await sendCommand(props.deviceId, 'prd_message', {
@@ -227,11 +242,16 @@ async function handleSaveAndClose() {
     isSaving.value = true;
     saveAction.value = 'close';
 
-    const result = await sendCommand(props.deviceId, 'close_prd_session', {
+    const closePayload: Record<string, unknown> = {
         project_slug: props.projectSlug,
         session_id: sessionId.value,
         save: true,
-    });
+    };
+    if (isRefineMode.value && props.prdId) {
+        closePayload.prd_id = props.prdId;
+    }
+
+    const result = await sendCommand(props.deviceId, 'close_prd_session', closePayload);
 
     if (result) {
         hasActiveSession.value = false;
@@ -250,11 +270,16 @@ async function handleSaveAndRun() {
     isSaving.value = true;
     saveAction.value = 'run';
 
-    const result = await sendCommand(props.deviceId, 'close_prd_session', {
+    const closePayload: Record<string, unknown> = {
         project_slug: props.projectSlug,
         session_id: sessionId.value,
         save: true,
-    });
+    };
+    if (isRefineMode.value && props.prdId) {
+        closePayload.prd_id = props.prdId;
+    }
+
+    const result = await sendCommand(props.deviceId, 'close_prd_session', closePayload);
 
     if (result) {
         hasActiveSession.value = false;
@@ -278,11 +303,15 @@ function handleBack() {
     if (hasActiveSession.value) {
         if (confirm('You have an active session. Leave without saving?')) {
             // Kill the session without saving
-            sendCommand(props.deviceId, 'close_prd_session', {
+            const closePayload: Record<string, unknown> = {
                 project_slug: props.projectSlug,
                 session_id: sessionId.value,
                 save: false,
-            });
+            };
+            if (isRefineMode.value && props.prdId) {
+                closePayload.prd_id = props.prdId;
+            }
+            sendCommand(props.deviceId, 'close_prd_session', closePayload);
             hasActiveSession.value = false;
             router.visit(`/projects/${props.projectSlug}/prds`);
         }
@@ -472,7 +501,7 @@ const saveButtonLabel = computed(() => {
 </script>
 
 <template>
-    <Head :title="`${props.projectName} — New PRD`" />
+    <Head :title="`${props.projectName} — ${isRefineMode ? 'Refine PRD' : 'New PRD'}`" />
 
     <div class="flex h-screen w-full flex-col bg-background">
         <!-- Custom header for chat page (no tab bar) -->
@@ -489,7 +518,7 @@ const saveButtonLabel = computed(() => {
                         <ArrowLeft class="size-5" />
                     </button>
                     <div class="min-w-0">
-                        <h1 class="truncate text-sm font-semibold">New PRD</h1>
+                        <h1 class="truncate text-sm font-semibold">{{ isRefineMode ? 'Refine PRD' : 'New PRD' }}</h1>
                         <p class="truncate text-xs text-muted-foreground">{{ props.projectName }}</p>
                     </div>
                 </div>
@@ -547,6 +576,15 @@ const saveButtonLabel = computed(() => {
             </div>
         </header>
 
+        <!-- Active run warning banner -->
+        <div
+            v-if="isRefineMode && props.hasActiveRun"
+            class="flex items-center gap-2 border-b border-warning/20 bg-warning/5 px-4 py-2 text-sm text-warning"
+        >
+            <AlertTriangle class="size-4 shrink-0" />
+            <span>This PRD is currently in use by an active run. Changes will apply to future runs.</span>
+        </div>
+
         <!-- Main content area -->
         <div
             ref="containerRef"
@@ -577,9 +615,14 @@ const saveButtonLabel = computed(() => {
                             <div class="mb-4 rounded-full bg-primary/10 p-4">
                                 <Send class="size-8 text-primary" />
                             </div>
-                            <h2 class="text-lg font-semibold">Create a new PRD</h2>
+                            <h2 class="text-lg font-semibold">{{ isRefineMode ? 'Refine your PRD' : 'Create a new PRD' }}</h2>
                             <p class="mt-2 max-w-sm text-sm text-muted-foreground">
-                                Describe what you want to build. Claude will help you create a detailed Product Requirements Document.
+                                <template v-if="isRefineMode">
+                                    Describe the changes you want to make. Claude will see the full PRD and make targeted updates.
+                                </template>
+                                <template v-else>
+                                    Describe what you want to build. Claude will help you create a detailed Product Requirements Document.
+                                </template>
                             </p>
                         </div>
 
@@ -667,7 +710,7 @@ const saveButtonLabel = computed(() => {
                                 :disabled="isSaving || serverNotLive"
                                 class="focus-ring w-full resize-none rounded-xl border border-border bg-surface px-4 py-3 pr-12 text-sm text-foreground placeholder-muted-foreground transition-colors duration-[var(--duration-micro)] focus:border-primary disabled:cursor-not-allowed disabled:opacity-50 lg:pr-4"
                                 :class="{ 'opacity-50': isClaudeResponding }"
-                                placeholder="Describe what you want to build..."
+                                :placeholder="isRefineMode ? 'Describe the changes you want to make...' : 'Describe what you want to build...'"
                                 rows="1"
                                 style="overflow-y: hidden"
                                 @keydown="handleKeydown"

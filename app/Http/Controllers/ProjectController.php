@@ -137,6 +137,23 @@ class ProjectController extends Controller
         ]);
     }
 
+    public function prdRefine(Request $request, string $slug, string $prdId): Response
+    {
+        $project = $this->findProject($request, $slug);
+
+        // Check if a run is active for this project
+        $hasActiveRun = in_array($project->status, ['running', 'paused']);
+
+        return Inertia::render('projects/PrdChat', [
+            'projectSlug' => $project->project_slug,
+            'projectName' => $project->project_name,
+            'deviceId' => $project->device_authorization_id,
+            'mode' => 'refine',
+            'prdId' => $prdId,
+            'hasActiveRun' => $hasActiveRun,
+        ]);
+    }
+
     private function findProject(Request $request, string $slug): CachedProjectState
     {
         return CachedProjectState::where('project_slug', $slug)

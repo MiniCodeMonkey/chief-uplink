@@ -28,6 +28,7 @@ class CommandRelayController extends Controller
         'get_settings',
         'update_settings',
         'get_prds',
+        'refine_prd',
     ];
 
     public function __construct(
