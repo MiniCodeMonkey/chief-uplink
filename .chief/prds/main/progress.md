@@ -80,6 +80,9 @@
 - `.shake` CSS class (not `animate-shake`) for error rollback animation
 - `claude_output` WebSocket message payload: `{ text: "...", story_id: "US-001" }` — text is streamed content, story_id tracks current story
 - ClaudeOutputPanel component: receives `chunks` array, animates text via requestAnimationFrame, handles auto-scroll/jump-to-bottom
+- PRDs are fetched live from chief server via `get_prds` command + `prds_response` listener — not cached in the web app
+- Valid command types listed in both `CommandRelayController::VALID_COMMANDS` (PHP) and `useCommandRelay` `CommandType` union (TS) — keep in sync
+- PRD-related routes planned: `/projects/{slug}/prd/new` (creation chat), `/projects/{slug}/prd/{id}/refine` (refinement chat)
 
 ---
 
@@ -967,5 +970,67 @@
   - `showOutputPanel` should be separate from `hasActiveRun` — output should persist after run completes while chunks exist
   - Mobile collapsible uses `v-show` (not `v-if`) to preserve scroll position and avoid remounting
   - `<pre>` element with `whitespace-pre-wrap` and `break-words` is ideal for monospace output display
+
+---
+
+## 2026-02-16 - US-026
+- What was implemented:
+  - Run History feature — consolidating and polishing the run history display across Overview and Run tabs
+  - Overview tab's "Recent Runs" card now has clickable entries that navigate to Run tab, and a "View all" link in the header
+  - Run tab empty state text updated to match acceptance criteria: "Create a PRD and start your first run."
+  - Run history is served from the `run_history` database table — available even when the server is offline
+  - Run history entries display: PRD name, status badge (completed/failed/paused/stopped with color coding), stories completed/total, duration, tokens used, timestamp
+  - Expandable run history entries in Run tab showing per-story results and error messages
+  - 12 new tests covering: field display, status colors, failed runs with error messages and story results, mixed status display, offline availability, overview tab limits (5 entries), empty states, sorting (most recent first), project slug scoping, cross-device isolation, access control (other users, authentication)
+  - All 355 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - resources/js/pages/projects/Overview.vue (updated: clickable run entries, "View all" link)
+  - resources/js/pages/projects/Run.vue (updated: empty state text)
+  - tests/Feature/Projects/RunHistoryTest.php (new: 12 tests)
+  - .chief/prds/main/prd.json (updated: US-026 passes: true)
+- **Learnings for future iterations:**
+  - Most of the run history functionality was already built across US-021 (Overview Recent Runs), US-023 (Run tab story list + history), and US-024 (Run controls) — US-026 consolidates and ensures all AC are met
+  - Overview run entries should be `<button>` not `<div>` for clickability — use `text-left w-full` classes for proper button styling
+  - Inertia server-rendered data doesn't need client-side skeleton states — the Inertia progress bar at the top of the page covers navigation loading
+  - Run history is DB-backed (`run_history` table) and doesn't depend on WebSocket/server connection — always available for offline viewing
+  - Overview limits to 5 recent runs; Run tab shows up to 20
+
+---
+
+## 2026-02-16 - US-027
+- What was implemented:
+  - PRDs Tab with full card-based UI for managing PRDs per project
+  - PRD cards fetched live from chief server via `get_prds` WebSocket command through `useCommandRelay`
+  - Each card displays: PRD name, story count, status badge (Active/Done/Draft) with color coding
+  - Action buttons per card: "Run" (starts a run with that PRD via `start_run` command, navigates to Run tab), "Refine" (navigates to PRD refinement chat page)
+  - "+ New PRD" button (prominent, accent color) in header — navigates to PRD creation chat page
+  - Cards fetched live from chief server when online; shows "Connect to server to view PRDs" placeholder when offline
+  - Skeleton loading state: 3 card-shaped placeholders with shimmer while fetching data
+  - Empty state: "No PRDs yet. Create one to define what you want to build." with "Create PRD" action button
+  - Cards animate in with stagger using `<TransitionGroup>` with gentle ease curve
+  - Error state with retry button when fetch fails
+  - Auto-reload when device comes back online (if no PRDs already loaded)
+  - `get_prds` command type added to `CommandRelayController::VALID_COMMANDS` and `useCommandRelay` TypeScript union
+  - `useChiefMessages` listens for `prds_response` and `error` message types
+  - All action buttons disabled with "Server offline" tooltip when server is not online
+  - ProjectController updated: `prds()` method now passes `deviceId` prop
+  - ProjectDetailLayoutTest updated: PRDs tab assertion includes `deviceId`
+  - 11 new tests covering: required props, deviceId correctness, all project statuses (idle/no_prd/error/paused), access control (404 non-existent, 404 other user, auth redirect, revoked device access), multi-device deviceId
+  - All 366 tests passing, ESLint clean, Pint clean, build passing
+- Files changed:
+  - app/Http/Controllers/ProjectController.php (updated: prds() passes deviceId)
+  - app/Http/Controllers/Api/CommandRelayController.php (updated: added get_prds to VALID_COMMANDS)
+  - resources/js/composables/useCommandRelay.ts (updated: added get_prds to CommandType union)
+  - resources/js/pages/projects/Prds.vue (rewritten: full PRD management UI with WebSocket integration)
+  - tests/Feature/Projects/ProjectDetailLayoutTest.php (updated: PRDs tab deviceId assertion)
+  - tests/Feature/Projects/PrdsTabTest.php (new: 11 tests)
+  - .chief/prds/main/prd.json (updated: US-027 passes: true)
+- **Learnings for future iterations:**
+  - PRDs are fetched live from the chief server (not cached in the web app) — uses `get_prds` command + `prds_response` listener pattern similar to Settings tab
+  - `get_prds` command added to both server-side `CommandRelayController::VALID_COMMANDS` array and client-side `useCommandRelay` TypeScript union
+  - PRD creation and refinement pages (US-028, US-030) are navigated to but not yet implemented — routes will be `/projects/{slug}/prd/new` and `/projects/{slug}/prd/{id}/refine`
+  - PRD "Run" action sends `start_run` with `prd_id` in payload and navigates to Run tab — the chief server handles PRD selection
+  - Status badge colors follow the established pattern: Active=success, Done=muted, Draft=warning
+  - `<TransitionGroup>` for stagger animation needs each child to have a unique `key`
 
 ---

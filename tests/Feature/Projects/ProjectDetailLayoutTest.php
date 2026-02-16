@@ -62,6 +62,7 @@ describe('Project Detail Routes', function () {
             ->component('projects/Prds')
             ->where('projectSlug', 'test-project')
             ->where('projectName', 'Test Project')
+            ->has('deviceId')
         );
     });
 
