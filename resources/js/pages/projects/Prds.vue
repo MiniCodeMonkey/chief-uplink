@@ -45,6 +45,7 @@ onMounted(() => {
         const payload = message.payload as Record<string, unknown>;
         if (payload.project_slug !== props.projectSlug) return;
 
+        if (loadTimeout) clearTimeout(loadTimeout);
         prds.value = (payload.prds as PrdItem[]) ?? [];
         isLoading.value = false;
         loadError.value = null;
@@ -61,6 +62,8 @@ onMounted(() => {
     loadPrds();
 });
 
+let loadTimeout: ReturnType<typeof setTimeout> | null = null;
+
 async function loadPrds() {
     if (!isOnline.value) {
         isLoading.value = false;
@@ -70,11 +73,20 @@ async function loadPrds() {
     isLoading.value = true;
     loadError.value = null;
 
+    if (loadTimeout) clearTimeout(loadTimeout);
+    loadTimeout = setTimeout(() => {
+        if (isLoading.value) {
+            isLoading.value = false;
+            loadError.value = 'Server did not respond. Please try again.';
+        }
+    }, 15000);
+
     const result = await sendCommand(props.deviceId, 'get_prds', {
         project_slug: props.projectSlug,
     });
 
     if (!result) {
+        if (loadTimeout) clearTimeout(loadTimeout);
         isLoading.value = false;
         loadError.value = 'Failed to load PRDs. Server may be offline.';
     }
