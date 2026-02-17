@@ -109,3 +109,19 @@
   - Pre-existing test failures: 93 tests require Redis running locally (RedisException) — these are not caused by any changes
   - Use `php -d memory_limit=512M` when running the full test suite to avoid OOM
 ---
+
+## 2026-02-18 - US-006
+- Created `.env.dusk.e2e` environment configuration for E2E tests
+- Files changed (in chief-uplink repo):
+  - `.env.dusk.e2e` — New file: E2E environment config with PostgreSQL on Sail (localhost:5432, user=sail, db=chief_e2e_test), Redis on localhost:6379, Reverb on port 8085, queue=sync, session=file, BCRYPT_ROUNDS=4
+- Key configuration choices:
+  - APP_URL=http://127.0.0.1:8001 (matches the `php artisan serve --port=8001` used in run.sh)
+  - REDIS_CLIENT=predis (not phpredis, matching .env.dusk.local pattern — predis is a pure-PHP client that doesn't need the phpredis extension)
+  - Reverb on port 8085 (different from default 8080 to avoid conflicts with local dev)
+  - Test Reverb credentials: e2e-test / e2e-test-key / e2e-test-secret (no real secrets)
+  - APP_KEY uses a test-only base64 key (not a real secret)
+- **Learnings for future iterations:**
+  - `.env.dusk.*` files are NOT gitignored by default (only `.env`, `.env.backup`, `.env.production` are)
+  - The existing `.env.dusk.local` uses SQLite + broadcast=log — E2E env uses pgsql + broadcast=reverb for real end-to-end testing
+  - REVERB_SERVER_HOST and REVERB_SERVER_PORT are needed alongside REVERB_HOST/REVERB_PORT — SERVER_* is what Reverb binds to, regular is what clients connect to
+---
