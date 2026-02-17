@@ -151,7 +151,8 @@
         "Script is executable (chmod +x)"
       ],
       "priority": 9,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-010",
