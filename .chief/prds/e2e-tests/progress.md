@@ -23,6 +23,7 @@
 - Live E2E tests use `tests/LiveE2E/` directory; Pest.php must include `'LiveE2E'` in the DuskTestCase `->in()` call
 - Live E2E tests don't create mock data — they rely on data seeded by `e2e:setup` and real CLI state via WebSocket
 - Dashboard project name comes from CLI state_snapshot; use `waitForText('test-project', 30)` to wait for async WebSocket data
+- Desktop tab bar nav: `nav[aria-label="Project tabs"]` — use `within()` + `clickLink()` to navigate tabs; `waitForLocation()` for Inertia SPA navigation
 
 ## 2026-02-17 - US-001
 - Implemented prd_output and prd_response_complete message types in the CLI
@@ -232,4 +233,63 @@
   - Toast auto-dismisses after 5000ms (success variant) — assert within that window or use `waitForText` which catches it in time
   - Settings save flow: click Save → `update_settings` command sent via WebSocket → CLI writes config.yaml → CLI sends `settings_updated` response → Vue shows toast + resets dirty state
   - Test order matters: this test changes max iterations from 5 to 10, so it should run after the "loads config values" test that asserts 5
+---
+
+## 2026-02-18 - US-013
+- Added Dusk test verifying PRD listing page shows PRDs from CLI workspace
+- Files changed (in chief-uplink repo):
+  - `tests/LiveE2E/LiveEndToEndTest.php` — Added `describe('PRDs', ...)` block with test that visits `/projects/test-project/prds`, waits for skeleton loaders to disappear, asserts "Feature Auth" PRD name appears, and asserts "3 stories" story count is displayed
+- Key implementation details:
+  - Uses `waitUntilMissing('[data-slot="skeleton"]', 30)` to wait for `prds_response` from CLI — same pattern as settings tests
+  - PRD name "Feature Auth" comes from the `name` field in the seeded `prd.json` (created by `e2e:setup`)
+  - Story count "3 stories" comes from `story_count` field in the `prds_response` payload
+  - Prds.vue displays `{count} stories` or `{count} story` (singular/plural handling)
+  - The PRD listing loads via: page sends `get_prds` command → CLI reads `.chief/prds/` dirs → sends `prds_response` → Vue hides skeleton and renders PRD cards
+- **Learnings for future iterations:**
+  - PRD listing page uses same skeleton loading pattern as settings (`[data-slot="skeleton"]`)
+  - PRD card shows: name (from prd.json `name` field), status badge (active/done/draft), story count, Run/Refine buttons
+  - The `prds_response` has a 15-second timeout in the Vue component — if CLI doesn't respond, error state shown
+  - PRD items have fields: `id`, `name`, `story_count`, `status` — these come from CLI parsing the prd.json files
+---
+
+## 2026-02-18 - US-014
+- Added Dusk test for creating a new PRD via Claude chat interface
+- Files changed (in chief-uplink repo):
+  - `tests/LiveE2E/LiveEndToEndTest.php` — Added `describe('PRD Chat', ...)` block with test that visits `/projects/test-project/prd/new`, types a project description into the chat textarea, clicks Send, waits up to 120s for Claude's streamed response to appear (`.prose-chat`), asserts thinking indicator is gone and response content is visible
+- Key implementation details:
+  - Uses `textarea[aria-label="Chat message input"]` selector for the input (stable ARIA label)
+  - Uses `press('Send')` to click the desktop send button by visible text
+  - `waitFor('.prose-chat', 120)` waits for Claude's streamed text — `.prose-chat` only appears when `msg.content` is non-empty (v-html rendered markdown)
+  - `.animate-pulse.rounded-full.bg-muted-foreground` targets the thinking indicator dots (3 animated circles)
+  - Test has `->timeout(180)` (3 minutes) overall to account for real Claude API latency
+  - This test depends on US-001 (prd_output message type), US-002 (field name fixes), US-004 (error handling)
+- **Learnings for future iterations:**
+  - PrdChat.vue uses `aria-label="Chat message input"` on the textarea — stable selector for Dusk tests
+  - Desktop send button renders with text "Send" — `press('Send')` works with Dusk's text content matching
+  - `.prose-chat` class is the key selector for Claude's rendered response — it only appears when streaming content is non-empty
+  - The thinking indicator (3 dots) uses `.animate-pulse.rounded-full.bg-muted-foreground` — all standard Tailwind classes, safe as CSS selectors
+  - Real Claude API calls need generous timeouts: 120s for `waitFor`, 180s for test overall
+  - PrdChat.vue handles both create (`new_prd`) and refine (`refine_prd`) modes via props — test uses create mode
+---
+
+## 2026-02-18 - US-015
+- Added Dusk test verifying tab navigation across all project tabs
+- Files changed (in chief-uplink repo):
+  - `tests/LiveE2E/LiveEndToEndTest.php` — Added `describe('Tab Navigation', ...)` block with test that visits project overview, then navigates through all 5 tabs (Overview, Run, Diffs, PRDs, Settings) via the desktop tab bar, asserting correct URL paths and expected content on each tab
+- Key implementation details:
+  - Uses `nav[aria-label="Project tabs"]` selector to scope tab clicks to the desktop nav bar
+  - Uses `$browser->within()` + `clickLink()` to click tab links by their visible text
+  - Uses `waitForLocation()` to wait for Inertia navigation to complete before asserting URL
+  - Overview page asserts "Status" and "Recent Activity" card headings (project has seeded PRD, so not in `no_prd` state)
+  - Run page asserts "Start Run" button text (project is idle, no active run)
+  - Diffs page asserts "Diffs" heading text
+  - PRDs and Settings pages assert correct URL only (detailed content already tested by other test cases)
+  - Test is a single browser session navigating through all tabs sequentially — proves Inertia SPA navigation works
+- **Learnings for future iterations:**
+  - `ProjectTabBar.vue` renders two navs: desktop (`hidden lg:block`) and mobile (bottom fixed bar) — both have `aria-label="Project tabs"` but `within()` finds the first match which is the desktop one
+  - `clickLink('Run')` in Dusk finds `<a>` tags by their visible text content — works with Inertia `<Link>` components since they render as `<a>` tags
+  - `waitForLocation()` is the right way to wait for Inertia client-side navigations (not full page loads)
+  - Overview page content depends on project status: `no_prd` shows "Get started by creating a PRD", otherwise shows dashboard cards (Status, Recent Activity, Git Info, Stats, Recent Runs)
+  - Run page always shows "Start Run" button when project is idle (no active run)
+  - Diffs page has an `<h2>` with "Diffs" that's always present regardless of diff data
 ---

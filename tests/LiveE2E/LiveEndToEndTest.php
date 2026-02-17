@@ -32,6 +32,53 @@ describe('Dashboard', function () {
     });
 });
 
+describe('Tab Navigation', function () {
+    test('navigating through all project tabs renders expected content', function () {
+        $user = User::where('email', 'e2e-test@example.com')->firstOrFail();
+
+        $this->browse(function (Browser $browser) use ($user) {
+            // Start on the Overview tab
+            $browser->loginAs($user)
+                ->visit('/projects/test-project')
+                ->waitFor('nav[aria-label="Project tabs"]', 15)
+                ->assertUrlIs(url('/projects/test-project'))
+                // Overview shows card headings (project has a seeded PRD, so not no_prd state)
+                ->assertSee('Status')
+                ->assertSee('Recent Activity');
+
+            // Navigate to Run tab via tab bar
+            $browser->within('nav[aria-label="Project tabs"]', function (Browser $nav) {
+                    $nav->clickLink('Run');
+                })
+                ->waitForLocation('/projects/test-project/run')
+                ->assertUrlIs(url('/projects/test-project/run'))
+                ->assertSee('Start Run');
+
+            // Navigate to Diffs tab
+            $browser->within('nav[aria-label="Project tabs"]', function (Browser $nav) {
+                    $nav->clickLink('Diffs');
+                })
+                ->waitForLocation('/projects/test-project/diffs')
+                ->assertUrlIs(url('/projects/test-project/diffs'))
+                ->assertSee('Diffs');
+
+            // Navigate to PRDs tab
+            $browser->within('nav[aria-label="Project tabs"]', function (Browser $nav) {
+                    $nav->clickLink('PRDs');
+                })
+                ->waitForLocation('/projects/test-project/prds')
+                ->assertUrlIs(url('/projects/test-project/prds'));
+
+            // Navigate to Settings tab
+            $browser->within('nav[aria-label="Project tabs"]', function (Browser $nav) {
+                    $nav->clickLink('Settings');
+                })
+                ->waitForLocation('/projects/test-project/settings')
+                ->assertUrlIs(url('/projects/test-project/settings'));
+        });
+    });
+});
+
 describe('PRDs', function () {
     test('prd listing shows PRDs from CLI workspace', function () {
         $user = User::where('email', 'e2e-test@example.com')->firstOrFail();

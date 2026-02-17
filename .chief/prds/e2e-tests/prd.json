@@ -237,7 +237,8 @@
         "Asserts expected content is present on each tab (at minimum, no error states)"
       ],
       "priority": 15,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     }
   ]
 }
