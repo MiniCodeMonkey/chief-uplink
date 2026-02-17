@@ -42,7 +42,7 @@ onMounted(() => {
     subscribe();
 
     on('prds_response', (message) => {
-        const payload = message.message as Record<string, unknown>;
+        const payload = message.payload as Record<string, unknown>;
         if (payload.project_slug !== props.projectSlug) return;
 
         prds.value = (payload.prds as PrdItem[]) ?? [];

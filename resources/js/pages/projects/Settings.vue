@@ -83,7 +83,7 @@ const isDirty = computed(() => {
 const chiefMessages = useChiefMessages(props.deviceId);
 
 chiefMessages.on('settings_response', (message) => {
-    const payload = message.message as Record<string, unknown>;
+    const payload = message.payload as Record<string, unknown>;
     if (payload.project_slug !== props.projectSlug) return;
 
     const settings = payload.settings as ProjectSettings;
@@ -93,7 +93,7 @@ chiefMessages.on('settings_response', (message) => {
 });
 
 chiefMessages.on('settings_updated', (message) => {
-    const payload = message.message as Record<string, unknown>;
+    const payload = message.payload as Record<string, unknown>;
     if (payload.project_slug !== props.projectSlug) return;
 
     const settings = payload.settings as ProjectSettings;

@@ -98,7 +98,7 @@ onMounted(() => {
     subscribe();
 
     on('diffs_response', (message) => {
-        const payload = message.message as Record<string, unknown>;
+        const payload = message.payload as Record<string, unknown>;
         if (payload.project_slug !== props.projectSlug) return;
 
         const storyId = payload.story_id as string;
