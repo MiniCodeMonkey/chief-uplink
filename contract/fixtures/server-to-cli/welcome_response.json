@@ -1,0 +1,12 @@
+{
+  "type": "welcome",
+  "protocol_version": 1,
+  "device_id": 42,
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "reverb": {
+    "key": "test-app-key",
+    "host": "127.0.0.1",
+    "port": 8080,
+    "scheme": "https"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "type": "state_snapshot",
+  "id": "msg-001",
+  "timestamp": "2026-02-17T00:00:00Z",
+  "projects": [
+    {
+      "name": "my-project",
+      "path": "/home/user/projects/my-project",
+      "has_chief": true,
+      "branch": "main",
+      "commit": {
+        "hash": "abc1234",
+        "message": "initial commit",
+        "author": "dev",
+        "timestamp": "2026-02-17T00:00:00Z"
+      },
+      "prds": []
+    }
+  ],
+  "runs": [],
+  "sessions": []
+}
