@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AlertTriangle, X } from 'lucide-vue-next';
-import { useVersionCompatibility } from '@/composables/useVersionCompatibility';
+import { useVersionCompatibility, formatVersion } from '@/composables/useVersionCompatibility';
 
 const { showWarning, deviceVersion, dismiss } =
     useVersionCompatibility();
@@ -23,7 +23,7 @@ const { showWarning, deviceVersion, dismiss } =
         >
             <AlertTriangle class="size-3.5 shrink-0" />
             <span class="flex-1">
-                This server is running Chief v{{ deviceVersion ?? 'unknown' }}. Some features may not work.
+                This server is running Chief v{{ deviceVersion ? formatVersion(deviceVersion) : 'unknown' }}. Some features may not work.
                 <a
                     href="/docs"
                     class="underline underline-offset-2 hover:text-warning/80"

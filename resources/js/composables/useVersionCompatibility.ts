@@ -5,12 +5,20 @@ import type { DeviceSummary } from '@/types';
 const MIN_CHIEF_VERSION = '0.5.0';
 
 /**
+ * Normalize a version string by stripping a leading "v" prefix
+ * and any git-describe suffix (e.g. "-86-gde10961").
+ */
+function normalizeVersion(version: string): string {
+    return version.replace(/^v/, '').replace(/-\d+-g[0-9a-f]+$/, '');
+}
+
+/**
  * Compare two semver version strings.
  * Returns -1 if a < b, 0 if a == b, 1 if a > b.
  */
 function compareVersions(a: string, b: string): number {
-    const partsA = a.split('.').map(Number);
-    const partsB = b.split('.').map(Number);
+    const partsA = normalizeVersion(a).split('.').map(Number);
+    const partsB = normalizeVersion(b).split('.').map(Number);
     const len = Math.max(partsA.length, partsB.length);
 
     for (let i = 0; i < len; i++) {
@@ -28,6 +36,13 @@ function compareVersions(a: string, b: string): number {
 export function isVersionCompatible(version: string | null): boolean {
     if (!version) return false;
     return compareVersions(version, MIN_CHIEF_VERSION) >= 0;
+}
+
+/**
+ * Format a version string for display, stripping any leading "v" prefix.
+ */
+export function formatVersion(version: string): string {
+    return version.replace(/^v/, '');
 }
 
 // Session-scoped set of dismissed device IDs

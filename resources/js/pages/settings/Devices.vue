@@ -10,7 +10,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatusDot } from '@/components/ui/status-dot';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { isVersionCompatible } from '@/composables/useVersionCompatibility';
+import { isVersionCompatible, formatVersion } from '@/composables/useVersionCompatibility';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 
@@ -191,7 +191,7 @@ function formatOs(os: string | null): string {
                                         {{ formatOs(device.os) }}<span v-if="device.arch"> ({{ device.arch }})</span>
                                     </span>
                                     <span v-if="device.chief_version" class="inline-flex items-center gap-1">
-                                        Chief v{{ device.chief_version }}
+                                        Chief v{{ formatVersion(device.chief_version) }}
                                         <TooltipProvider v-if="!isVersionCompatible(device.chief_version)">
                                             <Tooltip>
                                                 <TooltipTrigger as-child>
