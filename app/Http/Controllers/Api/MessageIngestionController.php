@@ -114,8 +114,8 @@ class MessageIngestionController extends Controller
         foreach ($messages as $message) {
             $type = $message['type'];
 
-            // Handle project_state: update cached project state
-            if ($type === 'project_state') {
+            // Handle project_state or state_snapshot: update cached project state
+            if ($type === 'project_state' || $type === 'state_snapshot') {
                 $this->handleProjectState($deviceId, $message);
             }
 
@@ -163,7 +163,8 @@ class MessageIngestionController extends Controller
      */
     protected function handleProjectState(int $deviceId, array $message): void
     {
-        $projects = $message['payload']['projects'] ?? [];
+        // Projects can be at top level (state_snapshot from CLI) or nested (project_state)
+        $projects = $message['projects'] ?? $message['payload']['projects'] ?? [];
 
         if (! is_array($projects)) {
             Log::warning('Invalid project_state payload', [
@@ -189,6 +190,9 @@ class MessageIngestionController extends Controller
                 continue;
             }
 
+            // Map CLI field names (branch, commit.hash) to DB columns (git_branch, last_commit_hash)
+            $commit = $project['commit'] ?? [];
+
             CachedProjectState::updateOrCreate(
                 [
                     'device_authorization_id' => $deviceId,
@@ -196,9 +200,9 @@ class MessageIngestionController extends Controller
                 ],
                 [
                     'project_name' => $project['project_name'] ?? $slug,
-                    'git_branch' => $project['git_branch'] ?? null,
-                    'last_commit_hash' => $project['last_commit_hash'] ?? null,
-                    'last_commit_message' => $project['last_commit_message'] ?? null,
+                    'git_branch' => $project['branch'] ?? $project['git_branch'] ?? null,
+                    'last_commit_hash' => $commit['hash'] ?? $project['last_commit_hash'] ?? null,
+                    'last_commit_message' => $commit['message'] ?? $project['last_commit_message'] ?? null,
                     'status' => $project['status'] ?? 'idle',
                     'current_prd_name' => $project['current_prd_name'] ?? null,
                     'stories_completed' => $project['stories_completed'] ?? 0,

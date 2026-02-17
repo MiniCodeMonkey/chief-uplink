@@ -200,6 +200,55 @@ test('project_state message accepts name field instead of project_slug', functio
         ->and($cached->git_branch)->toBe('main');
 });
 
+test('state_snapshot message updates cached project state with CLI field names', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+    $batchId = Str::uuid()->toString();
+
+    // This is the exact format the CLI sends — projects at top level,
+    // using "name", "branch", "commit.hash" instead of "project_slug", "git_branch", etc.
+    $this->postJson('/api/device/messages', [
+        'batch_id' => $batchId,
+        'messages' => [
+            [
+                'type' => 'state_snapshot',
+                'id' => 'msg-1',
+                'timestamp' => now()->toISOString(),
+                'projects' => [
+                    [
+                        'name' => 'my-project',
+                        'path' => '/home/user/projects/my-project',
+                        'has_chief' => true,
+                        'branch' => 'develop',
+                        'commit' => [
+                            'hash' => 'abc1234',
+                            'message' => 'feat: add login',
+                            'author' => 'dev',
+                            'timestamp' => now()->toISOString(),
+                        ],
+                        'prds' => [],
+                    ],
+                ],
+                'runs' => [],
+                'sessions' => [],
+            ],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ])->assertOk();
+
+    $cached = CachedProjectState::where('device_authorization_id', $this->device->id)
+        ->where('project_slug', 'my-project')
+        ->first();
+
+    expect($cached)->not->toBeNull()
+        ->and($cached->project_name)->toBe('my-project')
+        ->and($cached->git_branch)->toBe('develop')
+        ->and($cached->last_commit_hash)->toBe('abc1234')
+        ->and($cached->last_commit_message)->toBe('feat: add login');
+});
+
 /*
 |--------------------------------------------------------------------------
 | Implicit heartbeat

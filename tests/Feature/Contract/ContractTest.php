@@ -129,29 +129,22 @@ test('messages endpoint accepts state_snapshot fixture without error', function 
         ->assertJson(['accepted' => 1]);
 });
 
-test('state_snapshot fixture with name field populates CachedProjectState', function () {
+test('state_snapshot fixture directly populates CachedProjectState', function () {
     Event::fake([ChiefMessageReceived::class]);
 
     $token = generateContractToken($this->device);
     $fixture = loadFixture('cli-to-server/state_snapshot.json');
 
-    // The state_snapshot messages are wrapped in a project_state for ingestion
-    // since the ingestion endpoint processes project_state type specifically
+    // Send the state_snapshot fixture as-is — the ingestion endpoint must
+    // handle it directly (not wrapped in project_state)
     $this->postJson('/api/device/messages', [
         'batch_id' => \Illuminate\Support\Str::uuid()->toString(),
-        'messages' => [
-            [
-                'type' => 'project_state',
-                'payload' => [
-                    'projects' => $fixture['projects'],
-                ],
-            ],
-        ],
+        'messages' => [$fixture],
     ], [
         'Authorization' => 'Bearer '.$token,
     ])->assertOk();
 
-    // The fixture uses "name" not "project_slug" — verify it still works
+    // The fixture uses "name" not "project_slug" and has projects at top level
     $project = $fixture['projects'][0];
     expect($project)->toHaveKey('name');
     expect($project)->not->toHaveKey('project_slug');
@@ -161,7 +154,10 @@ test('state_snapshot fixture with name field populates CachedProjectState', func
         ->first();
 
     expect($cached)->not->toBeNull()
-        ->and($cached->project_name)->toBe($project['name']);
+        ->and($cached->project_name)->toBe($project['name'])
+        ->and($cached->git_branch)->toBe($project['branch'])
+        ->and($cached->last_commit_hash)->toBe($project['commit']['hash'])
+        ->and($cached->last_commit_message)->toBe($project['commit']['message']);
 });
 
 /*
