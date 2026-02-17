@@ -31,3 +31,21 @@ describe('Dashboard', function () {
         });
     });
 });
+
+describe('Settings', function () {
+    test('settings page loads config values from CLI', function () {
+        $user = User::where('email', 'e2e-test@example.com')->firstOrFail();
+
+        $this->browse(function (Browser $browser) use ($user) {
+            $browser->loginAs($user)
+                ->visit('/projects/test-project/settings')
+                // Wait for skeleton loaders to disappear (settings_response received)
+                ->waitUntilMissing('[data-slot="skeleton"]', 30)
+                // Assert max iterations field shows 5 (from seeded config.yaml)
+                ->assertInputValue('#max-iterations', '5')
+                // Assert auto commit toggle is visible and ON (aria-checked="true")
+                ->assertVisible('#auto-commit')
+                ->assertAttribute('#auto-commit', 'aria-checked', 'true');
+        });
+    });
+});

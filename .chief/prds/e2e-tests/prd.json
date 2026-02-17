@@ -179,7 +179,8 @@
         "Asserts auto commit toggle is visible and in the correct state"
       ],
       "priority": 11,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-012",
