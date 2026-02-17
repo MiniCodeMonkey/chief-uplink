@@ -173,7 +173,7 @@ class MessageIngestionController extends Controller
             return;
         }
 
-        $incomingSlugs = collect($projects)->pluck('project_slug')->filter()->toArray();
+        $incomingSlugs = collect($projects)->map(fn ($p) => $p['name'] ?? $p['project_slug'] ?? null)->filter()->toArray();
 
         // Remove cached projects that are no longer reported
         CachedProjectState::where('device_authorization_id', $deviceId)
@@ -184,17 +184,18 @@ class MessageIngestionController extends Controller
 
         // Upsert each project's state
         foreach ($projects as $project) {
-            if (! is_array($project) || empty($project['project_slug'])) {
+            $slug = $project['name'] ?? $project['project_slug'] ?? null;
+            if (! is_array($project) || empty($slug)) {
                 continue;
             }
 
             CachedProjectState::updateOrCreate(
                 [
                     'device_authorization_id' => $deviceId,
-                    'project_slug' => $project['project_slug'],
+                    'project_slug' => $slug,
                 ],
                 [
-                    'project_name' => $project['project_name'] ?? $project['project_slug'],
+                    'project_name' => $project['project_name'] ?? $slug,
                     'git_branch' => $project['git_branch'] ?? null,
                     'last_commit_hash' => $project['last_commit_hash'] ?? null,
                     'last_commit_message' => $project['last_commit_message'] ?? null,

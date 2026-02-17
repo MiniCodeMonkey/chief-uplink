@@ -1,0 +1,7 @@
+{
+  "type": "start_run",
+  "payload": {
+    "project": "my-project",
+    "prd_id": "feature-auth"
+  }
+}

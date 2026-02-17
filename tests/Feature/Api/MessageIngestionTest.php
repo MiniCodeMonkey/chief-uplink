@@ -165,6 +165,41 @@ test('project_state message updates cached project state', function () {
         ->and($cached->stories_total)->toBe(10);
 });
 
+test('project_state message accepts name field instead of project_slug', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+    $batchId = Str::uuid()->toString();
+
+    $this->postJson('/api/device/messages', [
+        'batch_id' => $batchId,
+        'messages' => [
+            [
+                'type' => 'project_state',
+                'payload' => [
+                    'projects' => [
+                        [
+                            'name' => 'my-cli-project',
+                            'status' => 'idle',
+                            'git_branch' => 'main',
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ])->assertOk();
+
+    $cached = CachedProjectState::where('device_authorization_id', $this->device->id)
+        ->where('project_slug', 'my-cli-project')
+        ->first();
+
+    expect($cached)->not->toBeNull()
+        ->and($cached->project_name)->toBe('my-cli-project')
+        ->and($cached->git_branch)->toBe('main');
+});
+
 /*
 |--------------------------------------------------------------------------
 | Implicit heartbeat

@@ -1,0 +1,7 @@
+{
+  "type": "create_project",
+  "payload": {
+    "name": "new-project",
+    "git_init": true
+  }
+}
