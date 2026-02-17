@@ -125,3 +125,35 @@
   - The existing `.env.dusk.local` uses SQLite + broadcast=log — E2E env uses pgsql + broadcast=reverb for real end-to-end testing
   - REVERB_SERVER_HOST and REVERB_SERVER_PORT are needed alongside REVERB_HOST/REVERB_PORT — SERVER_* is what Reverb binds to, regular is what clients connect to
 ---
+
+## 2026-02-18 - US-007
+- Created `e2e:setup` artisan command that seeds all test data for E2E tests
+- Files changed (in chief-uplink repo):
+  - `app/Console/Commands/E2ESetupCommand.php` — New file: Artisan command with signature `e2e:setup {--workspace=}` that creates test user (e2e-test@example.com), device authorization (e2e-test-device), generates HMAC access token (replicating DeviceOAuthController::generateAccessToken), creates test workspace with git repo + .chief/config.yaml + .chief/prds/feature-auth/{prd.md, prd.json}, writes CLI credentials.yaml
+- Key implementation details:
+  - Token generation replicates exact logic from `DeviceOAuthController::generateAccessToken()` (lines 290-304): base64url-encode JSON payload, HMAC-SHA256 sign with app key
+  - Credentials YAML format matches `internal/auth/auth.go` Credentials struct: access_token, refresh_token, expires_at, device_name, user, ws_url
+  - Config YAML format matches `internal/config/config.go` Config struct: maxIterations, autoCommit, commitPrefix, claudeModel, testCommand
+  - Command is idempotent: finds existing user/device by email/name before creating, updates refresh token on re-run
+  - Outputs JSON to stdout with all generated IDs, paths, and tokens (consumed by run.sh)
+  - ws_url built using same logic as DeviceOAuthController::buildWsUrl()
+- **Learnings for future iterations:**
+  - Artisan commands follow the pattern: `protected $signature`, `protected $description`, `public function handle(): int`
+  - Existing commands in `app/Console/Commands/` use service injection in handle() — E2ESetupCommand doesn't need any services
+  - `User::factory()->create()` requires the UserFactory — it uses `github_id` and `github_username` fields which are fake-generated
+  - credentials.yaml requires quoted strings for tokens and URLs (YAML string quoting)
+  - The `runGit()` helper uses `exec()` with escaped paths — safe for E2E workspace temp dirs
+  - `chmod($credPath, 0600)` matches the CLI's `SaveCredentials` which uses 0600 permissions
+  - Pre-existing 93 Redis test failures still present (not related to this change)
+---
+
+## 2026-02-18 - US-008
+- Fixed DuskTestCase Chrome binary path to work on both macOS and Linux
+- Files changed (in chief-uplink repo):
+  - `tests/DuskTestCase.php` — Made Chromium binary path conditional: only sets `setExperimentalOption('binary', '/usr/bin/chromium')` if the file exists (Linux CI); on macOS, ChromeDriver auto-detects Chrome at its default location
+- **Learnings for future iterations:**
+  - DuskTestCase.php is the base class for all Dusk browser tests — changes here affect all Dusk tests
+  - ChromeDriver auto-detects Chrome on macOS without needing an explicit binary path
+  - The `/usr/bin/chromium` path is specific to Linux CI environments (e.g., GitHub Actions with chromium package)
+  - `file_exists()` is the simplest conditional — no need to check `PHP_OS` or other platform detection
+---

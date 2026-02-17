@@ -39,7 +39,9 @@ abstract class DuskTestCase extends BaseTestCase
             ]);
         })->all());
 
-        $options->setExperimentalOption('binary', '/usr/bin/chromium');
+        if (file_exists('/usr/bin/chromium')) {
+            $options->setExperimentalOption('binary', '/usr/bin/chromium');
+        }
 
         return RemoteWebDriver::create(
             $_ENV['DUSK_DRIVER_URL'] ?? env('DUSK_DRIVER_URL') ?? 'http://localhost:9515',
