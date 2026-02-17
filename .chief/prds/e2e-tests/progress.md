@@ -20,6 +20,9 @@
 - Sail installer modifies `phpunit.xml` — always revert after `sail:install` to keep existing unit test DB config
 - E2E infra: `docker-compose.yml` has pgsql + redis only (no laravel.test container); app runs on host
 - Run full test suite with `php -d memory_limit=512M ./vendor/bin/pest --no-coverage` to avoid OOM
+- Live E2E tests use `tests/LiveE2E/` directory; Pest.php must include `'LiveE2E'` in the DuskTestCase `->in()` call
+- Live E2E tests don't create mock data — they rely on data seeded by `e2e:setup` and real CLI state via WebSocket
+- Dashboard project name comes from CLI state_snapshot; use `waitForText('test-project', 30)` to wait for async WebSocket data
 
 ## 2026-02-17 - US-001
 - Implemented prd_output and prd_response_complete message types in the CLI
@@ -156,4 +159,41 @@
   - ChromeDriver auto-detects Chrome on macOS without needing an explicit binary path
   - The `/usr/bin/chromium` path is specific to Linux CI environments (e.g., GitHub Actions with chromium package)
   - `file_exists()` is the simplest conditional — no need to check `PHP_OS` or other platform detection
+---
+
+## 2026-02-18 - US-009
+- Created `tests/LiveE2E/run.sh` master orchestration script for E2E test lifecycle
+- Files changed (in chief-uplink repo):
+  - `tests/LiveE2E/run.sh` — New file: Full lifecycle script that checks prerequisites (chief, php, node, docker), starts Sail containers, waits for PostgreSQL, backs up .env, copies .env.dusk.e2e, creates test DB, runs migrations, runs e2e:setup, builds frontend (npm run build), starts Reverb on port 8085, Laravel on port 8001, chief serve pointing at localhost, waits for CLI to connect (polls is_online), runs Dusk tests, cleanup trap restores .env and kills processes
+- Key implementation details:
+  - Script closely follows E2E_TESTING_SPEC.md plan
+  - Uses `set -euo pipefail` for strict error handling
+  - Cleanup function in EXIT trap: kills all PIDs, removes temp workspace, restores .env backup
+  - PostgreSQL readiness poll: up to 30 iterations with 1s sleep
+  - Chief CLI connection poll: uses `php artisan tinker --execute` to check `is_online` on DeviceAuthorization
+  - SETUP_JSON captured from e2e:setup stdout; DEVICE_ID extracted via inline PHP
+  - EXIT_CODE initially 1 (failure), overwritten by Dusk exit code on success
+- **Learnings for future iterations:**
+  - The run.sh script does NOT stop Sail containers on cleanup (they're shared infra that may be used by other tests)
+  - `php artisan tinker --execute` is useful for quick DB queries in shell scripts
+  - The script uses `HOME="$E2E_WORKSPACE/.chief-home"` to isolate chief CLI credentials
+  - `--no-reload` flag on `php artisan serve` prevents the server from watching for file changes
+---
+
+## 2026-02-18 - US-010
+- Created the first live E2E Dusk test: "Project Appears on Dashboard"
+- Files changed (in chief-uplink repo):
+  - `tests/LiveE2E/LiveEndToEndTest.php` — New file: Live E2E test that logs in as the seeded e2e-test@example.com user, visits /dashboard, and waits for "test-project" to appear (proving CLI→Reverb→Laravel→Browser state_snapshot pipeline works)
+  - `tests/Pest.php` — Added `'LiveE2E'` to the DuskTestCase `->in()` call so Pest recognizes LiveE2E directory as Dusk tests with DatabaseTruncation
+- Key implementation details:
+  - Uses `User::where('email', 'e2e-test@example.com')->firstOrFail()` — no factory creation; relies on e2e:setup seeded data
+  - Uses `waitForText('test-project', 30)` with 30s timeout to account for CLI connecting and sending state_snapshot via WebSocket
+  - Test proves the full pipeline: CLI sends state_snapshot → Reverb delivers → Laravel processes into CachedProjectState → Dashboard renders via Inertia
+  - Follows Pest describe/test syntax matching existing Browser tests
+- **Learnings for future iterations:**
+  - LiveE2E tests are different from Browser tests: no factory data, rely on real CLI state via WebSocket
+  - The `tests/Pest.php` `->in()` call must include each directory with Dusk tests — `LiveE2E` was missing initially
+  - The project slug `test-project` comes from the directory name in the workspace created by `e2e:setup`
+  - Dashboard shows `project_name` from CachedProjectState which falls back to the slug if CLI doesn't send a display name
+  - Use generous timeouts (30s) for `waitForText` since the CLI needs to connect, authenticate, and send state_snapshot
 ---
