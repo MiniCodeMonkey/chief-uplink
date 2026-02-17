@@ -31,8 +31,8 @@
         "Existing unit tests updated and passing"
       ],
       "priority": 2,
-      "passes": false,
-      "inProgress": true
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-003",
@@ -48,7 +48,8 @@
         "Unit tests for the new handler"
       ],
       "priority": 3,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-004",

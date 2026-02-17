@@ -8,6 +8,13 @@
 - Laravel side already has `prd_output` and `prd_response_complete` registered in `MessageIngestionController` and `WebSocketMessageBuffer`
 - PrdChat.vue expects `prd_output` with `text` field and `session_id`, and `prd_response_complete` with `session_id`
 - Contract fixtures live in `contract/fixtures/cli-to-server/` and `contract/fixtures/server-to-cli/`
+- Contract fixtures source of truth is chief-uplink repo; chief CLI syncs via `make sync-fixtures`
+- `.chief/` dir is gitignored in chief-uplink but prd.json was force-added (tracked)
+- Browser sends `message` field for both `new_prd` and `prd_message` commands (PrdChat.vue)
+- Session tests in `session_test.go` use `map[string]string` raw JSON for message construction
+- `embed.GetEditPrompt(prdDir)` returns the edit prompt template with `{{PRD_DIR}}` replaced — used for refine_prd sessions
+- `refinePRD()` differs from `newPRD()`: uses edit prompt, targets specific PRD dir, sends user message via stdin after spawn
+- PrdChat.vue sends `refine_prd` with `prd_id` field; `refine_prd` is already in `useCommandRelay.ts` CommandType union
 
 ## 2026-02-17 - US-001
 - Implemented prd_output and prd_response_complete message types in the CLI
@@ -23,4 +30,43 @@
   - `claude_output` with `data` field is still used for non-PRD run sessions (unchanged)
   - PRD sessions use `text` field (matching what PrdChat.vue expects) vs run sessions using `data` field
   - Completion signals should always be in the immediate batcher tier for responsiveness
+---
+
+## 2026-02-17 - US-002
+- Fixed CLI field name mismatches for `new_prd` and `prd_message` message types
+- Files changed (in chief repo):
+  - `internal/ws/messages.go` — Changed `NewPRDMessage.InitialMessage` JSON tag from `"initial_message"` to `"message"` (renamed field to `Message`); Changed `PRDMessageMessage.Content` JSON tag from `"content"` to `"message"` (renamed field to `Message`); Added `Project` field to `PRDMessageMessage`
+  - `internal/ws/messages_test.go` — Updated round-trip tests for both message types to use new field names
+  - `internal/cmd/session.go` — Updated `handleNewPRD` to use `req.Message` instead of `req.InitialMessage`; Updated `handlePRDMessage` to use `req.Message` instead of `req.Content`
+  - `internal/cmd/session_test.go` — Updated all test fixtures to use `"message"` key instead of `"initial_message"` / `"content"`
+  - `internal/contract/contract_test.go` — Added `TestCommandNewPRD_PayloadWrapper` and `TestCommandPRDMessage_PayloadWrapper` contract tests
+  - `Makefile` — Updated sync-fixtures list to include all current fixtures (was missing several)
+- Files changed (in chief-uplink repo):
+  - `contract/fixtures/server-to-cli/command_new_prd.json` — New fixture with `message` field
+  - `contract/fixtures/server-to-cli/command_prd_message.json` — New fixture with `message` field
+- **Learnings for future iterations:**
+  - Always check PrdChat.vue for the exact field names the browser sends — it uses `sendCommand()` from `useCommandRelay`
+  - Both `new_prd` and `prd_message` use the same field name `"message"` for the user's text
+  - `PRDMessageMessage` was also missing the `project` field that the browser sends
+  - Contract fixtures in chief repo are gitignored — source of truth is chief-uplink, synced via `make sync-fixtures`
+  - The Makefile sync list must be manually updated when new fixtures are added
+---
+
+## 2026-02-17 - US-003
+- Implemented `refine_prd` handler in CLI so users can edit existing PRDs from the web UI
+- Files changed (in chief repo):
+  - `internal/ws/messages.go` — Added `TypeRefinePRD = "refine_prd"` constant and `RefinePRDMessage` struct with Project, SessionID, PRDID, and Message fields
+  - `internal/ws/messages_test.go` — Added `TestRefinePRDRoundTrip` round-trip test
+  - `internal/cmd/session.go` — Added `refinePRD()` method to sessionManager (uses `embed.GetEditPrompt`, verifies PRD dir exists, spawns Claude, sends user message via stdin, streams prd_output, sends prd_response_complete on exit, auto-converts); Added `handleRefinePRD()` handler function
+  - `internal/cmd/serve.go` — Added `case ws.TypeRefinePRD:` in handleMessage switch, wired to handleRefinePRD
+  - `internal/cmd/session_test.go` — Added 4 tests: `TestSessionManager_RefinePRD` (basic), `_ProjectNotFound`, `_PRDNotFound`, `_WithMockClaude_RefinePRD` (full lifecycle with mock Claude)
+  - `internal/contract/contract_test.go` — Added `TestCommandRefinePRD_PayloadWrapper` contract test
+  - `Makefile` — Added `server-to-cli/command_refine_prd.json` to sync-fixtures list
+- Files changed (in chief-uplink repo):
+  - `contract/fixtures/server-to-cli/command_refine_prd.json` — New fixture with project, session_id, prd_id, message fields
+- **Learnings for future iterations:**
+  - `refinePRD()` is very similar to `newPRD()` but: uses edit prompt (not init prompt), targets specific PRD directory, sends user's message as first stdin input (with small delay to let Claude process the prompt)
+  - The PRD directory must exist before refine — the handler returns CLAUDE_ERROR if the PRD dir doesn't exist (not PRD_NOT_FOUND, since it gets through to sessions.refinePRD first)
+  - Contract fixtures in the chief repo are gitignored — don't try `git add` them, only add in chief-uplink
+  - The mock Claude script test confirms full lifecycle: spawn → prd_output streaming → prd_message follow-up → close → prd_response_complete
 ---
