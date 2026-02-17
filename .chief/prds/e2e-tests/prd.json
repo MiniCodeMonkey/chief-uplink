@@ -208,7 +208,8 @@
         "Asserts story count is displayed (3 stories from the seeded prd.json)"
       ],
       "priority": 13,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-014",

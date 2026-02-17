@@ -32,6 +32,23 @@ describe('Dashboard', function () {
     });
 });
 
+describe('PRDs', function () {
+    test('prd listing shows PRDs from CLI workspace', function () {
+        $user = User::where('email', 'e2e-test@example.com')->firstOrFail();
+
+        $this->browse(function (Browser $browser) use ($user) {
+            $browser->loginAs($user)
+                ->visit('/projects/test-project/prds')
+                // Wait for skeleton loaders to disappear (prds_response received)
+                ->waitUntilMissing('[data-slot="skeleton"]', 30)
+                // Assert the feature-auth PRD appears
+                ->assertSee('Feature Auth')
+                // Assert story count is displayed (3 stories from seeded prd.json)
+                ->assertSee('3 stories');
+        });
+    });
+});
+
 describe('Settings', function () {
     test('settings page loads config values from CLI', function () {
         $user = User::where('email', 'e2e-test@example.com')->firstOrFail();
