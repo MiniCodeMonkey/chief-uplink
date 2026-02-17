@@ -20,6 +20,7 @@ class MessageIngestionController extends Controller
         'project_state',
         'claude_output',
         'prd_output',
+        'prd_response_complete',
         'run_complete',
         'run_paused',
         'run_progress',
@@ -27,11 +28,16 @@ class MessageIngestionController extends Controller
         'clone_complete',
         'clone_progress',
         'session_expired',
+        'session_timeout_warning',
         'quota_exhausted',
         'state_snapshot',
         'project_list',
         'settings',
+        'settings_response',
+        'settings_updated',
         'log_lines',
+        'prds_response',
+        'diffs_response',
     ];
 
     /**

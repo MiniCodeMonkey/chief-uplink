@@ -471,6 +471,42 @@ test('message ingestion without token returns 401', function () {
 |--------------------------------------------------------------------------
 */
 
+test('ALLOWED_TYPES includes all response types the frontend expects', function () {
+    // Contract test: the frontend listens for these message types via useChiefMessages.on().
+    // If chief sends a response type that isn't in ALLOWED_TYPES, the message ingestion
+    // endpoint rejects it with 422 and the browser never receives the response.
+    $expectedResponseTypes = [
+        // Run lifecycle
+        'run_progress',
+        'run_complete',
+        'run_paused',
+
+        // Streaming output
+        'claude_output',
+        'prd_output',
+        'prd_response_complete',
+
+        // Command responses (chief responds to get_* commands)
+        'prds_response',
+        'diffs_response',
+        'settings_response',
+        'settings_updated',
+        'log_lines',
+
+        // Session lifecycle
+        'session_expired',
+        'session_timeout_warning',
+
+        // Errors
+        'error',
+    ];
+
+    foreach ($expectedResponseTypes as $type) {
+        expect(in_array($type, MessageIngestionController::ALLOWED_TYPES, true))
+            ->toBeTrue("Frontend expects '{$type}' but it's missing from ALLOWED_TYPES");
+    }
+});
+
 test('all allowed message types are accepted', function () {
     Event::fake([ChiefMessageReceived::class]);
 
@@ -491,4 +527,86 @@ test('all allowed message types are accepted', function () {
         ->assertJson([
             'accepted' => count(MessageIngestionController::ALLOWED_TYPES),
         ]);
+});
+
+/*
+|--------------------------------------------------------------------------
+| End-to-end: chief response ingestion and broadcast
+|--------------------------------------------------------------------------
+| These tests simulate the chief server responding to get_* commands:
+| chief sends a response message → ingestion endpoint accepts it → broadcast.
+| This catches the exact bug where a response type is missing from ALLOWED_TYPES,
+| since the ingestion endpoint rejects unknown types with 422.
+*/
+
+test('prds_response from chief is accepted and broadcast to browser', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+
+    $this->postJson('/api/device/messages', [
+        'batch_id' => Str::uuid()->toString(),
+        'messages' => [
+            [
+                'type' => 'prds_response',
+                'payload' => [
+                    'project_slug' => 'my-project',
+                    'prds' => [
+                        ['id' => 'prd-1', 'name' => 'Auth Feature', 'story_count' => 5, 'status' => 'active'],
+                    ],
+                ],
+            ],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ])->assertOk();
+
+    Event::assertDispatched(ChiefMessageReceived::class, function ($event) {
+        return $event->deviceId === $this->device->id
+            && $event->message['type'] === 'prds_response';
+    });
+});
+
+test('diffs_response from chief is accepted and broadcast to browser', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+
+    $this->postJson('/api/device/messages', [
+        'batch_id' => Str::uuid()->toString(),
+        'messages' => [
+            [
+                'type' => 'diffs_response',
+                'payload' => ['project_slug' => 'my-project', 'diffs' => []],
+            ],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ])->assertOk();
+
+    Event::assertDispatched(ChiefMessageReceived::class, function ($event) {
+        return $event->message['type'] === 'diffs_response';
+    });
+});
+
+test('settings_response from chief is accepted and broadcast to browser', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateIngestionToken($this->device);
+
+    $this->postJson('/api/device/messages', [
+        'batch_id' => Str::uuid()->toString(),
+        'messages' => [
+            [
+                'type' => 'settings_response',
+                'payload' => ['project_slug' => 'my-project', 'settings' => []],
+            ],
+        ],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ])->assertOk();
+
+    Event::assertDispatched(ChiefMessageReceived::class, function ($event) {
+        return $event->message['type'] === 'settings_response';
+    });
 });

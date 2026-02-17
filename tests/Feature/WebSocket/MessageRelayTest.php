@@ -441,6 +441,8 @@ describe('Valid Command Types', function () {
             'get_diffs',
             'get_settings',
             'update_settings',
+            'get_prds',
+            'refine_prd',
         ];
 
         foreach ($expectedCommands as $command) {
