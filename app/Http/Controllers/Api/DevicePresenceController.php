@@ -94,7 +94,7 @@ class DevicePresenceController extends Controller
             'reverb' => [
                 'key' => config('reverb.apps.apps.0.key'),
                 'host' => $reverbApp['host'] ?? null,
-                'port' => $reverbApp['port'] ?? 443,
+                'port' => (int) ($reverbApp['port'] ?? 443),
                 'scheme' => $reverbApp['scheme'] ?? 'https',
             ],
         ]);
