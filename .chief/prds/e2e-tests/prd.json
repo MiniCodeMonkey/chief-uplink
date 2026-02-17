@@ -81,7 +81,8 @@
         "Add a brief comment at the top of docker-compose.yml noting that the laravel.test container was intentionally removed (app runs on host for E2E tests)"
       ],
       "priority": 5,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-006",

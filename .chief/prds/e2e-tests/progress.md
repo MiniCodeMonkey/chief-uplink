@@ -15,6 +15,11 @@
 - `embed.GetEditPrompt(prdDir)` returns the edit prompt template with `{{PRD_DIR}}` replaced — used for refine_prd sessions
 - `refinePRD()` differs from `newPRD()`: uses edit prompt, targets specific PRD dir, sends user message via stdin after spawn
 - PrdChat.vue sends `refine_prd` with `prd_id` field; `refine_prd` is already in `useCommandRelay.ts` CommandType union
+- `sendCommand()` in `useCommandRelay.ts` returns `CommandResponse | null` — null = failure (toast already shown by composable)
+- `.chief/` dir is gitignored in chief-uplink — use `git add -f` for tracked files like prd.json
+- Sail installer modifies `phpunit.xml` — always revert after `sail:install` to keep existing unit test DB config
+- E2E infra: `docker-compose.yml` has pgsql + redis only (no laravel.test container); app runs on host
+- Run full test suite with `php -d memory_limit=512M ./vendor/bin/pest --no-coverage` to avoid OOM
 
 ## 2026-02-17 - US-001
 - Implemented prd_output and prd_response_complete message types in the CLI
@@ -69,4 +74,38 @@
   - The PRD directory must exist before refine — the handler returns CLAUDE_ERROR if the PRD dir doesn't exist (not PRD_NOT_FOUND, since it gets through to sessions.refinePRD first)
   - Contract fixtures in the chief repo are gitignored — don't try `git add` them, only add in chief-uplink
   - The mock Claude script test confirms full lifecycle: spawn → prd_output streaming → prd_message follow-up → close → prd_response_complete
+---
+
+## 2026-02-18 - US-004
+- Fixed PrdChat.vue error handling and stuck "thinking" states
+- Files changed (in chief-uplink repo):
+  - `resources/js/pages/projects/PrdChat.vue` — Added error handling after `sendCommand` returns null in `handleSend()` (both first-message and subsequent-message branches); Added 3-minute response timeout safety net that clears `isClaudeResponding` and shows error toast; Refactored error handler to use shared `resetRespondingState()` helper; Clear response timeout on `prd_response_complete`, `error`, and `session_expired` events; Clean up response timeout timer on component unmount; Also added response timeout to `handleResume()` flow
+- **Learnings for future iterations:**
+  - `sendCommand()` returns `CommandResponse | null` — null means failure (the composable already shows a toast for the specific error)
+  - The `on('error', ...)` handler was already correctly resetting `isClaudeResponding` and cleaning up the placeholder — just needed `clearResponseTimeout()` added
+  - When the first sendCommand fails, must also reset `hasActiveSession` and `sessionId` since they were optimistically set
+  - Prettier reformats the entire file when run — many formatting-only changes in the diff are from Prettier, not logic changes
+  - `.chief/` dir is gitignored — must use `git add -f` to stage changes to tracked files like prd.json
+  - Pre-existing test failures in `CommandPalette.test.ts` (localStorage.clear issue) — not related to this change
+---
+
+## 2026-02-18 - US-005
+- Installed and configured Laravel Sail for PostgreSQL + Redis
+- Files changed (in chief-uplink repo):
+  - `docker-compose.yml` — New file: Sail-generated docker-compose with only pgsql and redis services (laravel.test app container intentionally removed); PostgreSQL 17 on port 5432, Redis Alpine on port 6379; includes comment explaining why app container was removed
+- Reverted sail:install side effects:
+  - `phpunit.xml` — Sail installer changed DB config from SQLite in-memory to `testing` database; reverted to preserve existing unit test configuration
+  - `compose.yaml` — Sail generated this file (Docker Compose V2 naming); renamed to `docker-compose.yml` for consistency with PRD spec
+- Verified:
+  - PostgreSQL accessible via `pg_isready -U sail` — returns "accepting connections"
+  - Redis accessible via `redis-cli ping` — returns PONG
+  - SailServiceProvider auto-discovered via package discovery (no manual registration needed in AppServiceProvider)
+  - 743 existing tests still pass (93 pre-existing Redis-dependent test failures unrelated to this change)
+- **Learnings for future iterations:**
+  - Sail installer in Laravel 12 generates `compose.yaml` (Docker Compose V2 naming), not `docker-compose.yml`
+  - Sail installer modifies `phpunit.xml` to change DB_CONNECTION from sqlite to pgsql and DB_DATABASE to `testing` — always revert this if you want to keep existing unit test config
+  - SailServiceProvider is auto-registered via package discovery (bootstrap/cache/packages.php) — no need to manually add to AppServiceProvider
+  - Sail is a `require-dev` dependency, so it's only available in dev/testing environments (sufficient gating for production safety)
+  - Pre-existing test failures: 93 tests require Redis running locally (RedisException) — these are not caused by any changes
+  - Use `php -d memory_limit=512M` when running the full test suite to avoid OOM
 ---
