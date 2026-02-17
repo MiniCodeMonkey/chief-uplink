@@ -48,4 +48,29 @@ describe('Settings', function () {
                 ->assertAttribute('#auto-commit', 'aria-checked', 'true');
         });
     });
+
+    test('settings update roundtrip persists changes to CLI config', function () {
+        $user = User::where('email', 'e2e-test@example.com')->firstOrFail();
+
+        $this->browse(function (Browser $browser) use ($user) {
+            $browser->loginAs($user)
+                ->visit('/projects/test-project/settings')
+                // Wait for settings to load
+                ->waitUntilMissing('[data-slot="skeleton"]', 30)
+                // Confirm baseline value
+                ->assertInputValue('#max-iterations', '5')
+                // Change max iterations from 5 to 10
+                ->type('#max-iterations', '10')
+                // Click Save Settings
+                ->press('Save Settings')
+                // Wait for "Settings saved" toast (settings_updated via WebSocket)
+                ->waitForText('Settings saved', 15)
+                // Assert field shows 10
+                ->assertInputValue('#max-iterations', '10')
+                // Reload page to verify CLI persisted the change to disk
+                ->visit('/projects/test-project/settings')
+                ->waitUntilMissing('[data-slot="skeleton"]', 30)
+                ->assertInputValue('#max-iterations', '10');
+        });
+    });
 });

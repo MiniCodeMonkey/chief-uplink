@@ -197,3 +197,39 @@
   - Dashboard shows `project_name` from CachedProjectState which falls back to the slug if CLI doesn't send a display name
   - Use generous timeouts (30s) for `waitForText` since the CLI needs to connect, authenticate, and send state_snapshot
 ---
+
+## 2026-02-18 - US-011
+- Added Dusk test verifying settings page loads config values from CLI
+- Files changed (in chief-uplink repo):
+  - `tests/LiveE2E/LiveEndToEndTest.php` — Added `describe('Settings', ...)` block with test that visits `/projects/test-project/settings`, waits for skeleton loaders to disappear, asserts max iterations input value is `5`, and asserts auto commit toggle is visible with `aria-checked="true"`
+- Key implementation details:
+  - Uses `waitUntilMissing('[data-slot="skeleton"]', 30)` to wait for settings_response — skeleton elements have `data-slot="skeleton"` attribute with `animate-pulse` class
+  - Settings form fields use ID-based selectors: `#max-iterations`, `#auto-commit`, `#commit-prefix`, `#claude-model`, `#test-command`
+  - Auto commit toggle is a custom `<Toggle>` component that uses `role="switch"` and `aria-checked` attribute for state
+  - Seeded config.yaml has `maxIterations: 5` and `autoCommit: true` — these are the expected values
+  - `assertInputValue` checks the value attribute/property of input fields
+  - `assertAttribute` checks DOM attributes — used for `aria-checked` on the toggle button
+- **Learnings for future iterations:**
+  - Settings page uses `[data-slot="skeleton"]` for loading skeletons — use `waitUntilMissing` with this selector to wait for settings to load
+  - Toggle component uses `aria-checked="true"/"false"` — not a regular checkbox, so use `assertAttribute` instead of `assertChecked`
+  - Settings are loaded via WebSocket roundtrip: page sends `get_settings` command → CLI responds with `settings_response` → Vue applies values and hides skeleton
+  - All settings form fields have stable `#id` selectors — prefer these over CSS class selectors
+---
+
+## 2026-02-18 - US-012
+- Added Dusk test verifying settings update roundtrip persists changes to CLI config
+- Files changed (in chief-uplink repo):
+  - `tests/LiveE2E/LiveEndToEndTest.php` — Added test "settings update roundtrip persists changes to CLI config" in the Settings describe block: visits settings page, waits for load, confirms baseline value of 5, changes max iterations to 10 via `type()`, presses "Save Settings", waits for "Settings saved" toast, asserts field shows 10, reloads page and asserts 10 persists
+- Key implementation details:
+  - Uses Dusk `type('#max-iterations', '10')` which calls `clear()` then `sendKeys()` — Vue's `v-model.number` directive responds to the `input` event from `sendKeys()`
+  - `press('Save Settings')` finds the submit button by its visible text content
+  - `waitForText('Settings saved', 15)` waits for the success toast (from `success('Settings saved')` in Settings.vue on `settings_updated` WebSocket event)
+  - Page reload triggers fresh `get_settings` WebSocket roundtrip to verify CLI persisted the value to `config.yaml`
+  - The `isDirty` computed property in Settings.vue enables the Save button when input value differs from server value
+- **Learnings for future iterations:**
+  - Dusk's `type()` with a CSS selector works well for number inputs — it clears first then sends keys, triggering proper Vue reactivity
+  - `press('Save Settings')` matches button by visible text — works even when button has icon children (Dusk uses text content matching)
+  - Toast auto-dismisses after 5000ms (success variant) — assert within that window or use `waitForText` which catches it in time
+  - Settings save flow: click Save → `update_settings` command sent via WebSocket → CLI writes config.yaml → CLI sends `settings_updated` response → Vue shows toast + resets dirty state
+  - Test order matters: this test changes max iterations from 5 to 10, so it should run after the "loads config values" test that asserts 5
+---
