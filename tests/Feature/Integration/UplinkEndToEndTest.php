@@ -430,7 +430,7 @@ test('message ingestion resets heartbeat timer and prevents stale detection', fu
 | and are broadcast to the browser.
 */
 
-test('project state updates cached state and broadcasts to browser', function () {
+test('project state updates cached state without broadcasting', function () {
     Event::fake([DeviceConnected::class, ChiefMessageReceived::class]);
 
     $token = generateE2eToken($this->device);
@@ -472,8 +472,8 @@ test('project state updates cached state and broadcasts to browser', function ()
         ->and($cached->status)->toBe('running')
         ->and($cached->stories_completed)->toBe(5);
 
-    // Verify broadcast to browser
-    Event::assertDispatched(ChiefMessageReceived::class, function ($event) {
+    // Server-only types are NOT broadcast (payload exceeds Reverb's 10KB limit)
+    Event::assertNotDispatched(ChiefMessageReceived::class, function ($event) {
         return $event->message['type'] === 'project_state';
     });
 });

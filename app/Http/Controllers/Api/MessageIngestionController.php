@@ -55,6 +55,17 @@ class MessageIngestionController extends Controller
      */
     public const BATCH_DEDUP_TTL = 300;
 
+    /**
+     * Message types that are persisted server-side only and should not be
+     * broadcast to the browser via Reverb. These payloads can exceed Reverb's
+     * max_message_size (10KB) and the frontend does not listen for them.
+     */
+    public const SERVER_ONLY_TYPES = [
+        'state_snapshot',
+        'project_state',
+        'project_list',
+    ];
+
     public function __construct(
         protected WebSocketMessageBuffer $messageBuffer,
     ) {}
@@ -138,8 +149,11 @@ class MessageIngestionController extends Controller
                 }
             }
 
-            // Broadcast to browser via Reverb
-            ChiefMessageReceived::dispatch($deviceId, $userId, $message);
+            // Broadcast to browser via Reverb (skip server-only types that
+            // exceed Reverb's 10KB payload limit and aren't used by the frontend)
+            if (! in_array($type, self::SERVER_ONLY_TYPES, true)) {
+                ChiefMessageReceived::dispatch($deviceId, $userId, $message);
+            }
 
             $accepted++;
         }
