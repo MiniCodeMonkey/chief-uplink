@@ -49,6 +49,30 @@ describe('PRDs', function () {
     });
 });
 
+describe('PRD Chat', function () {
+    test('create new PRD via Claude chat', function () {
+        $user = User::where('email', 'e2e-test@example.com')->firstOrFail();
+
+        $this->browse(function (Browser $browser) use ($user) {
+            $browser->loginAs($user)
+                ->visit('/projects/test-project/prd/new')
+                // Wait for the chat input to be ready
+                ->waitFor('textarea[aria-label="Chat message input"]', 15)
+                // Type a project description
+                ->type('textarea[aria-label="Chat message input"]', 'Create a simple todo list app with add and delete functionality')
+                // Click Send button (desktop button)
+                ->press('Send')
+                // Wait for Claude's response to appear (up to 120s for real Claude API call)
+                // The .prose-chat class appears when Claude's streamed text is rendered
+                ->waitFor('.prose-chat', 120)
+                // Assert the thinking indicator dots are gone
+                ->assertMissing('.animate-pulse.rounded-full.bg-muted-foreground')
+                // Assert chat content is visible (response text rendered)
+                ->assertPresent('.prose-chat');
+        });
+    })->timeout(180); // 3-minute overall timeout for Claude API latency
+});
+
 describe('Settings', function () {
     test('settings page loads config values from CLI', function () {
         $user = User::where('email', 'e2e-test@example.com')->firstOrFail();

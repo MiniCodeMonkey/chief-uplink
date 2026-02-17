@@ -224,7 +224,8 @@
         "This test depends on US-001, US-002, US-004 being fixed first"
       ],
       "priority": 14,
-      "passes": false
+      "passes": true,
+      "inProgress": false
     },
     {
       "id": "US-015",
