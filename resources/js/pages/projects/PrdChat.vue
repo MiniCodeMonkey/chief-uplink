@@ -14,7 +14,14 @@ import {
     Save,
     Send,
 } from 'lucide-vue-next';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    watch,
+} from 'vue';
 import PrdPreviewPanel from '@/components/PrdPreviewPanel.vue';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -74,6 +81,10 @@ const showRunConfirm = ref(false);
 const sessionTimeoutRemaining = ref<number | null>(null);
 let timeoutTickInterval: ReturnType<typeof setInterval> | null = null;
 
+// Response timeout safety net (3 minutes)
+const RESPONSE_TIMEOUT_MS = 3 * 60 * 1000;
+let responseTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
 // Preview state — accumulated PRD content from Claude messages
 const prdContent = ref('');
 
@@ -122,12 +133,19 @@ const countdownText = computed(() => {
 
 // Computed: should show timer prominently (< 1 minute)
 const isTimerUrgent = computed(() => {
-    return sessionTimeoutRemaining.value !== null && sessionTimeoutRemaining.value < 60;
+    return (
+        sessionTimeoutRemaining.value !== null &&
+        sessionTimeoutRemaining.value < 60
+    );
 });
 
 // Computed: should show timer at all (< 10 minutes or always when session is active)
 const showTimer = computed(() => {
-    return hasActiveSession.value && sessionTimeoutRemaining.value !== null && sessionTimeoutRemaining.value <= 600;
+    return (
+        hasActiveSession.value &&
+        sessionTimeoutRemaining.value !== null &&
+        sessionTimeoutRemaining.value <= 600
+    );
 });
 
 // Text area auto-resize
@@ -212,9 +230,15 @@ function startTimeoutTick(initialRemaining: number) {
     }
 
     timeoutTickInterval = setInterval(() => {
-        if (sessionTimeoutRemaining.value !== null && sessionTimeoutRemaining.value > 0) {
+        if (
+            sessionTimeoutRemaining.value !== null &&
+            sessionTimeoutRemaining.value > 0
+        ) {
             sessionTimeoutRemaining.value--;
-        } else if (sessionTimeoutRemaining.value !== null && sessionTimeoutRemaining.value <= 0) {
+        } else if (
+            sessionTimeoutRemaining.value !== null &&
+            sessionTimeoutRemaining.value <= 0
+        ) {
             // Timer reached zero — the backend will send session_expired
             if (timeoutTickInterval) {
                 clearInterval(timeoutTickInterval);
@@ -233,7 +257,13 @@ function resetTimeoutTimer() {
 // Send a user message
 async function handleSend() {
     const text = userInput.value.trim();
-    if (!text || isClaudeResponding.value || serverNotLive.value || sessionExpired.value) return;
+    if (
+        !text ||
+        isClaudeResponding.value ||
+        serverNotLive.value ||
+        sessionExpired.value
+    )
+        return;
 
     // Add user message
     const userMsg: ChatMessage = {
@@ -262,6 +292,9 @@ async function handleSend() {
     };
     messages.value.push(claudeMsg);
 
+    // Start the response safety-net timeout
+    startResponseTimeout();
+
     if (!hasActiveSession.value) {
         // First message — start the session
         sessionId.value = generateSessionId();
@@ -285,14 +318,20 @@ async function handleSend() {
             });
         }
 
+        if (!result) {
+            // Command failed — reset state so the UI isn't stuck
+            hasActiveSession.value = false;
+            sessionId.value = null;
+            resetRespondingState();
+            return;
+        }
+
         // Start timeout tracking from server response
-        if (result) {
-            const remaining = result.session_timeout_remaining;
-            if (remaining !== undefined) {
-                startTimeoutTick(remaining);
-            } else {
-                resetTimeoutTimer();
-            }
+        const remaining = result.session_timeout_remaining;
+        if (remaining !== undefined) {
+            startTimeoutTick(remaining);
+        } else {
+            resetTimeoutTimer();
         }
     } else {
         // Subsequent message — send via prd_message (resets inactivity timer)
@@ -302,14 +341,18 @@ async function handleSend() {
             message: text,
         });
 
+        if (!result) {
+            // Command failed — reset responding state so the UI isn't stuck
+            resetRespondingState();
+            return;
+        }
+
         // Update timeout from server response
-        if (result) {
-            const remaining = result.session_timeout_remaining;
-            if (remaining !== undefined) {
-                startTimeoutTick(remaining);
-            } else {
-                resetTimeoutTimer();
-            }
+        const remaining = result.session_timeout_remaining;
+        if (remaining !== undefined) {
+            startTimeoutTick(remaining);
+        } else {
+            resetTimeoutTimer();
         }
     }
 }
@@ -340,7 +383,11 @@ async function handleSaveAndClose() {
         closePayload.prd_id = props.prdId;
     }
 
-    const result = await sendCommand(props.deviceId, 'close_prd_session', closePayload);
+    const result = await sendCommand(
+        props.deviceId,
+        'close_prd_session',
+        closePayload,
+    );
 
     if (result) {
         hasActiveSession.value = false;
@@ -384,7 +431,11 @@ async function executeSaveAndRun() {
         closePayload.prd_id = props.prdId;
     }
 
-    const closeResult = await sendCommand(props.deviceId, 'close_prd_session', closePayload);
+    const closeResult = await sendCommand(
+        props.deviceId,
+        'close_prd_session',
+        closePayload,
+    );
 
     if (!closeResult) {
         errorToast('Save failed', 'Failed to save the PRD. Please try again.');
@@ -408,7 +459,11 @@ async function executeSaveAndRun() {
         startPayload.prd_id = props.prdId;
     }
 
-    const startResult = await sendCommand(props.deviceId, 'start_run', startPayload);
+    const startResult = await sendCommand(
+        props.deviceId,
+        'start_run',
+        startPayload,
+    );
 
     if (startResult) {
         success('PRD saved — starting run');
@@ -462,6 +517,7 @@ async function handleResume() {
 
     if (result) {
         isClaudeResponding.value = true;
+        startResponseTimeout();
         const remaining = result.session_timeout_remaining;
         if (remaining !== undefined) {
             startTimeoutTick(remaining);
@@ -480,7 +536,10 @@ async function handleResume() {
     } else {
         sessionExpired.value = true;
         hasActiveSession.value = false;
-        errorToast('Resume failed', 'Could not resume the session. Please try again.');
+        errorToast(
+            'Resume failed',
+            'Could not resume the session. Please try again.',
+        );
     }
 
     isResuming.value = false;
@@ -494,6 +553,47 @@ function clearTimeoutTimer() {
         timeoutTickInterval = null;
     }
     sessionTimeoutRemaining.value = null;
+}
+
+// Reset the chat state when a command fails or times out
+function resetRespondingState() {
+    isClaudeResponding.value = false;
+    clearResponseTimeout();
+
+    // Remove the streaming placeholder if it's still empty, otherwise mark it as done
+    const lastMsg = messages.value[messages.value.length - 1];
+    if (lastMsg && lastMsg.role === 'claude' && lastMsg.isStreaming) {
+        if (lastMsg.content === '') {
+            messages.value.pop();
+        } else {
+            lastMsg.isStreaming = false;
+        }
+    }
+
+    prdContent.value = getLatestClaudeContent();
+    focusInput();
+}
+
+// Start a safety-net timer that clears the "thinking" state if no response arrives
+function startResponseTimeout() {
+    clearResponseTimeout();
+    responseTimeoutTimer = setTimeout(() => {
+        if (isClaudeResponding.value) {
+            resetRespondingState();
+            errorToast(
+                'Response timeout',
+                'No response received from Claude. Please try again.',
+            );
+        }
+    }, RESPONSE_TIMEOUT_MS);
+}
+
+// Clear the response safety-net timer
+function clearResponseTimeout() {
+    if (responseTimeoutTimer) {
+        clearTimeout(responseTimeoutTimer);
+        responseTimeoutTimer = null;
+    }
 }
 
 // Back navigation with unsaved changes confirmation
@@ -537,7 +637,12 @@ async function replayBufferedMessages() {
             device_id: props.deviceId,
         });
 
-        const sessions = response.data.sessions as Record<string, Array<{ message: Record<string, unknown>; timestamp: number }>> | undefined;
+        const sessions = response.data.sessions as
+            | Record<
+                  string,
+                  Array<{ message: Record<string, unknown>; timestamp: number }>
+              >
+            | undefined;
         if (!sessions) {
             isReplayingMessages.value = false;
             return;
@@ -556,8 +661,13 @@ async function replayBufferedMessages() {
                 if (type === 'prd_output') {
                     const text = msg.text as string;
                     if (text) {
-                        const lastMsg = messages.value[messages.value.length - 1];
-                        if (lastMsg && lastMsg.role === 'claude' && lastMsg.isStreaming) {
+                        const lastMsg =
+                            messages.value[messages.value.length - 1];
+                        if (
+                            lastMsg &&
+                            lastMsg.role === 'claude' &&
+                            lastMsg.isStreaming
+                        ) {
                             lastMsg.content += text;
                         }
                         prdContent.value = getLatestClaudeContent();
@@ -575,7 +685,11 @@ async function replayBufferedMessages() {
                     sessionExpired.value = true;
                     clearTimeoutTimer();
                     const lastMsg = messages.value[messages.value.length - 1];
-                    if (lastMsg && lastMsg.role === 'claude' && lastMsg.isStreaming) {
+                    if (
+                        lastMsg &&
+                        lastMsg.role === 'claude' &&
+                        lastMsg.isStreaming
+                    ) {
                         lastMsg.isStreaming = false;
                     }
                 }
@@ -592,7 +706,12 @@ async function replayBufferedMessages() {
 
 // Watch for Echo reconnection to replay missed messages
 watch(echoConnected, (connected, wasConnected) => {
-    if (connected && !wasConnected && wasDisconnected.value && hasActiveSession.value) {
+    if (
+        connected &&
+        !wasConnected &&
+        wasDisconnected.value &&
+        hasActiveSession.value
+    ) {
         replayBufferedMessages();
     }
     if (!connected) {
@@ -633,6 +752,7 @@ onMounted(() => {
         if (payload.session_id !== sessionId.value) return;
 
         isClaudeResponding.value = false;
+        clearResponseTimeout();
 
         // Mark the last Claude message as not streaming
         const lastMsg = messages.value[messages.value.length - 1];
@@ -649,25 +769,10 @@ onMounted(() => {
     // Handle errors
     on('error', (message) => {
         const payload = message.message as Record<string, unknown>;
-        if (payload.session_id && payload.session_id !== sessionId.value) return;
+        if (payload.session_id && payload.session_id !== sessionId.value)
+            return;
 
-        isClaudeResponding.value = false;
-
-        // Mark the last Claude message as not streaming
-        const lastMsg = messages.value[messages.value.length - 1];
-        if (lastMsg && lastMsg.role === 'claude' && lastMsg.isStreaming) {
-            if (lastMsg.content === '') {
-                // Remove empty Claude message if error occurred before any output
-                messages.value.pop();
-            } else {
-                lastMsg.isStreaming = false;
-            }
-        }
-
-        // Update PRD content
-        prdContent.value = getLatestClaudeContent();
-
-        focusInput();
+        resetRespondingState();
     });
 
     // Handle session timeout warning
@@ -681,9 +786,15 @@ onMounted(() => {
         startTimeoutTick(minutesRemaining * 60);
 
         if (minutesRemaining <= 1) {
-            errorToast('Session expiring', 'Your session will expire in less than 1 minute. Save your work.');
+            errorToast(
+                'Session expiring',
+                'Your session will expire in less than 1 minute. Save your work.',
+            );
         } else {
-            useToast().warning('Session timeout', `Session will expire in ${minutesRemaining} minutes.`);
+            useToast().warning(
+                'Session timeout',
+                `Session will expire in ${minutesRemaining} minutes.`,
+            );
         }
     });
 
@@ -693,6 +804,7 @@ onMounted(() => {
         if (payload.session_id !== sessionId.value) return;
 
         isClaudeResponding.value = false;
+        clearResponseTimeout();
         hasActiveSession.value = false;
         sessionExpired.value = true;
         clearTimeoutTimer();
@@ -714,6 +826,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
     window.removeEventListener('beforeunload', handleBeforeUnload);
     clearTimeoutTimer();
+    clearResponseTimeout();
     // Clean up drag listeners
     document.removeEventListener('mousemove', onDrag);
     document.removeEventListener('mouseup', stopDrag);
@@ -722,7 +835,9 @@ onBeforeUnmount(() => {
 // Get the latest Claude message content for the PRD preview
 // Shows the most recent Claude response as the PRD being generated
 function getLatestClaudeContent(): string {
-    const claudeMessages = messages.value.filter((m) => m.role === 'claude' && m.content);
+    const claudeMessages = messages.value.filter(
+        (m) => m.role === 'claude' && m.content,
+    );
     if (claudeMessages.length === 0) return '';
     return claudeMessages[claudeMessages.length - 1].content;
 }
@@ -739,12 +854,18 @@ const renderedMarkdown = computed(() => {
             .replace(/>/g, '&gt;');
 
         // Code blocks (```...```)
-        html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, lang, code) => {
-            return `<pre class="my-2 rounded-md bg-background p-3 text-sm"><code class="language-${lang}">${code}</code></pre>`;
-        });
+        html = html.replace(
+            /```(\w*)\n([\s\S]*?)```/g,
+            (_match, lang, code) => {
+                return `<pre class="my-2 rounded-md bg-background p-3 text-sm"><code class="language-${lang}">${code}</code></pre>`;
+            },
+        );
 
         // Inline code (`...`)
-        html = html.replace(/`([^`]+)`/g, '<code class="rounded bg-background px-1.5 py-0.5 font-mono text-sm">$1</code>');
+        html = html.replace(
+            /`([^`]+)`/g,
+            '<code class="rounded bg-background px-1.5 py-0.5 font-mono text-sm">$1</code>',
+        );
 
         // Bold (**...**)
         html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -753,15 +874,27 @@ const renderedMarkdown = computed(() => {
         html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
 
         // Headers (# ...)
-        html = html.replace(/^### (.+)$/gm, '<h3 class="mt-3 mb-1 text-sm font-semibold">$1</h3>');
-        html = html.replace(/^## (.+)$/gm, '<h2 class="mt-4 mb-1 text-base font-semibold">$1</h2>');
-        html = html.replace(/^# (.+)$/gm, '<h1 class="mt-4 mb-2 text-lg font-bold">$1</h1>');
+        html = html.replace(
+            /^### (.+)$/gm,
+            '<h3 class="mt-3 mb-1 text-sm font-semibold">$1</h3>',
+        );
+        html = html.replace(
+            /^## (.+)$/gm,
+            '<h2 class="mt-4 mb-1 text-base font-semibold">$1</h2>',
+        );
+        html = html.replace(
+            /^# (.+)$/gm,
+            '<h1 class="mt-4 mb-2 text-lg font-bold">$1</h1>',
+        );
 
         // Unordered lists (- ...)
         html = html.replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>');
 
         // Ordered lists (1. ...)
-        html = html.replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>');
+        html = html.replace(
+            /^\d+\. (.+)$/gm,
+            '<li class="ml-4 list-decimal">$1</li>',
+        );
 
         // Line breaks
         html = html.replace(/\n/g, '<br>');
@@ -775,7 +908,9 @@ const renderedMarkdown = computed(() => {
 const saveButtonLabel = computed(() => {
     if (isSaving.value) {
         if (saveAction.value === 'run') {
-            return saveStep.value === 'starting' ? 'Starting run...' : 'Saving PRD...';
+            return saveStep.value === 'starting'
+                ? 'Starting run...'
+                : 'Saving PRD...';
         }
         return 'Saving...';
     }
@@ -784,7 +919,9 @@ const saveButtonLabel = computed(() => {
 </script>
 
 <template>
-    <Head :title="`${props.projectName} — ${isRefineMode ? 'Refine PRD' : 'New PRD'}`" />
+    <Head
+        :title="`${props.projectName} — ${isRefineMode ? 'Refine PRD' : 'New PRD'}`"
+    />
 
     <div class="flex h-screen w-full flex-col bg-background">
         <!-- Custom header for chat page (no tab bar) -->
@@ -801,8 +938,12 @@ const saveButtonLabel = computed(() => {
                         <ArrowLeft class="size-5" />
                     </button>
                     <div class="min-w-0">
-                        <h1 class="truncate text-sm font-semibold">{{ isRefineMode ? 'Refine PRD' : 'New PRD' }}</h1>
-                        <p class="truncate text-xs text-muted-foreground">{{ props.projectName }}</p>
+                        <h1 class="truncate text-sm font-semibold">
+                            {{ isRefineMode ? 'Refine PRD' : 'New PRD' }}
+                        </h1>
+                        <p class="truncate text-xs text-muted-foreground">
+                            {{ props.projectName }}
+                        </p>
                     </div>
                 </div>
 
@@ -812,29 +953,47 @@ const saveButtonLabel = computed(() => {
                     <div
                         v-if="showTimer"
                         class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-all duration-[var(--duration-standard)]"
-                        :class="isTimerUrgent
-                            ? 'bg-destructive/10 text-destructive scale-110'
-                            : 'text-muted-foreground'"
+                        :class="
+                            isTimerUrgent
+                                ? 'scale-110 bg-destructive/10 text-destructive'
+                                : 'text-muted-foreground'
+                        "
                         role="timer"
                         :aria-label="`Session expires in ${countdownText}`"
                     >
-                        <Clock class="size-3.5" :class="{ 'animate-pulse': isTimerUrgent }" />
-                        <span :class="{ 'text-sm font-semibold': isTimerUrgent }">{{ countdownText }}</span>
+                        <Clock
+                            class="size-3.5"
+                            :class="{ 'animate-pulse': isTimerUrgent }"
+                        />
+                        <span
+                            :class="{ 'text-sm font-semibold': isTimerUrgent }"
+                            >{{ countdownText }}</span
+                        >
                     </div>
 
                     <div class="flex items-center lg:hidden">
                         <div class="flex rounded-lg border border-border p-0.5">
                             <button
                                 class="focus-ring rounded-md px-3 py-1 text-xs font-medium transition-colors duration-[var(--duration-micro)]"
-                                :class="mobileView === 'chat' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
+                                :class="
+                                    mobileView === 'chat'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                "
                                 @click="mobileView = 'chat'"
                             >
-                                <MessageSquare class="mr-1 inline-block size-3" />
+                                <MessageSquare
+                                    class="mr-1 inline-block size-3"
+                                />
                                 Chat
                             </button>
                             <button
                                 class="focus-ring rounded-md px-3 py-1 text-xs font-medium transition-colors duration-[var(--duration-micro)]"
-                                :class="mobileView === 'preview' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
+                                :class="
+                                    mobileView === 'preview'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                "
                                 :disabled="!hasPreviewContent"
                                 @click="mobileView = 'preview'"
                             >
@@ -850,7 +1009,11 @@ const saveButtonLabel = computed(() => {
                     <DropdownMenu>
                         <DropdownMenuTrigger as-child>
                             <Button
-                                :disabled="!hasActiveSession || isSaving || serverNotLive"
+                                :disabled="
+                                    !hasActiveSession ||
+                                    isSaving ||
+                                    serverNotLive
+                                "
                                 size="sm"
                             >
                                 <Loader2
@@ -881,7 +1044,10 @@ const saveButtonLabel = computed(() => {
             class="flex items-center gap-2 border-b border-warning/20 bg-warning/5 px-4 py-2 text-sm text-warning"
         >
             <AlertTriangle class="size-4 shrink-0" />
-            <span>This PRD is currently in use by an active run. Changes will apply to future runs.</span>
+            <span
+                >This PRD is currently in use by an active run. Changes will
+                apply to future runs.</span
+            >
         </div>
 
         <!-- Session expired banner -->
@@ -898,29 +1064,27 @@ const saveButtonLabel = computed(() => {
                 :disabled="serverNotLive || isResuming"
                 @click="handleResume"
             >
-                <Loader2
-                    v-if="isResuming"
-                    class="size-4 animate-spin"
-                />
+                <Loader2 v-if="isResuming" class="size-4 animate-spin" />
                 <RefreshCw v-else class="size-4" />
                 Resume
             </Button>
         </div>
 
         <!-- Main content area -->
-        <div
-            ref="containerRef"
-            class="relative flex min-h-0 flex-1"
-        >
+        <div ref="containerRef" class="relative flex min-h-0 flex-1">
             <!-- Chat panel -->
             <div
                 class="flex flex-col"
                 :class="{
                     'hidden lg:flex': mobileView === 'preview',
-                    'flex': mobileView === 'chat',
+                    flex: mobileView === 'chat',
                     'w-full lg:w-auto': true,
                 }"
-                :style="{ flexBasis: `${dividerPosition}%`, flexShrink: 0, flexGrow: 0 }"
+                :style="{
+                    flexBasis: `${dividerPosition}%`,
+                    flexShrink: 0,
+                    flexGrow: 0,
+                }"
             >
                 <!-- Chat messages area -->
                 <div
@@ -940,13 +1104,25 @@ const saveButtonLabel = computed(() => {
                             <div class="mb-4 rounded-full bg-primary/10 p-4">
                                 <Send class="size-8 text-primary" />
                             </div>
-                            <h2 class="text-lg font-semibold">{{ isRefineMode ? 'Refine your PRD' : 'Create a new PRD' }}</h2>
-                            <p class="mt-2 max-w-sm text-sm text-muted-foreground">
+                            <h2 class="text-lg font-semibold">
+                                {{
+                                    isRefineMode
+                                        ? 'Refine your PRD'
+                                        : 'Create a new PRD'
+                                }}
+                            </h2>
+                            <p
+                                class="mt-2 max-w-sm text-sm text-muted-foreground"
+                            >
                                 <template v-if="isRefineMode">
-                                    Describe the changes you want to make. Claude will see the full PRD and make targeted updates.
+                                    Describe the changes you want to make.
+                                    Claude will see the full PRD and make
+                                    targeted updates.
                                 </template>
                                 <template v-else>
-                                    Describe what you want to build. Claude will help you create a detailed Product Requirements Document.
+                                    Describe what you want to build. Claude will
+                                    help you create a detailed Product
+                                    Requirements Document.
                                 </template>
                             </p>
                         </div>
@@ -961,20 +1137,26 @@ const saveButtonLabel = computed(() => {
                                 v-for="msg in messages"
                                 :key="msg.id"
                                 class="flex"
-                                :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+                                :class="
+                                    msg.role === 'user'
+                                        ? 'justify-end'
+                                        : 'justify-start'
+                                "
                             >
                                 <!-- User message -->
                                 <div
                                     v-if="msg.role === 'user'"
                                     class="max-w-[85%] rounded-2xl rounded-br-md bg-primary/10 px-4 py-2.5 text-sm text-foreground lg:max-w-[70%]"
                                 >
-                                    <p class="whitespace-pre-wrap break-words">{{ msg.content }}</p>
+                                    <p class="break-words whitespace-pre-wrap">
+                                        {{ msg.content }}
+                                    </p>
                                 </div>
 
                                 <!-- Claude message -->
                                 <div
                                     v-else
-                                    class="max-w-[85%] rounded-2xl rounded-bl-md bg-surface px-4 py-2.5 text-sm text-foreground lg:max-w-[70%]"
+                                    class="bg-surface max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-sm text-foreground lg:max-w-[70%]"
                                     :class="{ 'border border-border': true }"
                                 >
                                     <!-- Streaming content -->
@@ -986,17 +1168,32 @@ const saveButtonLabel = computed(() => {
 
                                     <!-- Typing indicator (empty streaming message) -->
                                     <div
-                                        v-if="msg.isStreaming && msg.content === ''"
+                                        v-if="
+                                            msg.isStreaming &&
+                                            msg.content === ''
+                                        "
                                         class="flex items-center gap-1.5 py-1"
                                     >
-                                        <span class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground" style="animation-delay: 0ms" />
-                                        <span class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground" style="animation-delay: 200ms" />
-                                        <span class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground" style="animation-delay: 400ms" />
+                                        <span
+                                            class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground"
+                                            style="animation-delay: 0ms"
+                                        />
+                                        <span
+                                            class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground"
+                                            style="animation-delay: 200ms"
+                                        />
+                                        <span
+                                            class="inline-block size-2 animate-pulse rounded-full bg-muted-foreground"
+                                            style="animation-delay: 400ms"
+                                        />
                                     </div>
 
                                     <!-- Streaming cursor -->
                                     <span
-                                        v-if="msg.isStreaming && msg.content !== ''"
+                                        v-if="
+                                            msg.isStreaming &&
+                                            msg.content !== ''
+                                        "
                                         class="inline-block h-4 w-0.5 animate-pulse bg-primary align-text-bottom"
                                     />
                                 </div>
@@ -1032,11 +1229,19 @@ const saveButtonLabel = computed(() => {
                             <textarea
                                 ref="textareaRef"
                                 v-model="userInput"
-                                :disabled="isSaving || serverNotLive || sessionExpired"
+                                :disabled="
+                                    isSaving || serverNotLive || sessionExpired
+                                "
                                 aria-label="Chat message input"
-                                class="focus-ring w-full resize-none rounded-xl border border-border bg-surface px-4 py-3 pr-12 text-sm text-foreground placeholder-muted-foreground transition-colors duration-[var(--duration-micro)] focus:border-primary disabled:cursor-not-allowed disabled:opacity-50 lg:pr-4"
+                                class="focus-ring bg-surface w-full resize-none rounded-xl border border-border px-4 py-3 pr-12 text-sm text-foreground placeholder-muted-foreground transition-colors duration-[var(--duration-micro)] focus:border-primary disabled:cursor-not-allowed disabled:opacity-50 lg:pr-4"
                                 :class="{ 'opacity-50': isClaudeResponding }"
-                                :placeholder="sessionExpired ? 'Session expired — click Resume to continue' : (isRefineMode ? 'Describe the changes you want to make...' : 'Describe what you want to build...')"
+                                :placeholder="
+                                    sessionExpired
+                                        ? 'Session expired — click Resume to continue'
+                                        : isRefineMode
+                                          ? 'Describe the changes you want to make...'
+                                          : 'Describe what you want to build...'
+                                "
                                 rows="1"
                                 style="overflow-y: hidden"
                                 @keydown="handleKeydown"
@@ -1044,8 +1249,14 @@ const saveButtonLabel = computed(() => {
 
                             <!-- Mobile send button (inside textarea) -->
                             <button
-                                class="focus-ring absolute bottom-2 right-2 flex items-center justify-center rounded-lg bg-primary p-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 lg:hidden"
-                                :disabled="!userInput.trim() || isClaudeResponding || isSaving || serverNotLive || sessionExpired"
+                                class="focus-ring absolute right-2 bottom-2 flex items-center justify-center rounded-lg bg-primary p-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 lg:hidden"
+                                :disabled="
+                                    !userInput.trim() ||
+                                    isClaudeResponding ||
+                                    isSaving ||
+                                    serverNotLive ||
+                                    sessionExpired
+                                "
                                 aria-label="Send message"
                                 @click="handleSend"
                             >
@@ -1056,7 +1267,13 @@ const saveButtonLabel = computed(() => {
                         <!-- Desktop send button -->
                         <Button
                             class="hidden lg:flex"
-                            :disabled="!userInput.trim() || isClaudeResponding || isSaving || serverNotLive || sessionExpired"
+                            :disabled="
+                                !userInput.trim() ||
+                                isClaudeResponding ||
+                                isSaving ||
+                                serverNotLive ||
+                                sessionExpired
+                            "
                             @click="handleSend"
                         >
                             <Send class="size-4" />
@@ -1067,10 +1284,26 @@ const saveButtonLabel = computed(() => {
                     <!-- Helper text -->
                     <div class="mx-auto max-w-3xl px-4 pb-3">
                         <p class="text-[10px] text-muted-foreground">
-                            <span class="hidden lg:inline">Press Enter to send, Shift+Enter for new line.</span>
-                            <span v-if="serverNotLive" class="text-destructive"> Server offline — messages cannot be sent.</span>
-                            <span v-else-if="sessionExpired" class="text-destructive"> Session expired — click Resume to continue.</span>
-                            <span v-else-if="isClaudeResponding" class="text-primary"> Claude is thinking...</span>
+                            <span class="hidden lg:inline"
+                                >Press Enter to send, Shift+Enter for new
+                                line.</span
+                            >
+                            <span v-if="serverNotLive" class="text-destructive">
+                                Server offline — messages cannot be sent.</span
+                            >
+                            <span
+                                v-else-if="sessionExpired"
+                                class="text-destructive"
+                            >
+                                Session expired — click Resume to
+                                continue.</span
+                            >
+                            <span
+                                v-else-if="isClaudeResponding"
+                                class="text-primary"
+                            >
+                                Claude is thinking...</span
+                            >
                         </p>
                     </div>
                 </div>
@@ -1078,7 +1311,7 @@ const saveButtonLabel = computed(() => {
 
             <!-- Resizable divider (desktop only) -->
             <div
-                class="hidden lg:flex group relative z-10 w-0 cursor-col-resize items-center justify-center"
+                class="group relative z-10 hidden w-0 cursor-col-resize items-center justify-center lg:flex"
                 @mousedown="startDrag"
             >
                 <div
@@ -1090,8 +1323,12 @@ const saveButtonLabel = computed(() => {
                     :class="{ 'opacity-100': isDragging }"
                 >
                     <div class="flex gap-px">
-                        <div class="h-3 w-px rounded-full bg-muted-foreground" />
-                        <div class="h-3 w-px rounded-full bg-muted-foreground" />
+                        <div
+                            class="h-3 w-px rounded-full bg-muted-foreground"
+                        />
+                        <div
+                            class="h-3 w-px rounded-full bg-muted-foreground"
+                        />
                     </div>
                 </div>
             </div>
@@ -1101,7 +1338,7 @@ const saveButtonLabel = computed(() => {
                 class="flex-1 border-l border-border bg-background"
                 :class="{
                     'hidden lg:block': mobileView === 'chat',
-                    'block': mobileView === 'preview',
+                    block: mobileView === 'preview',
                 }"
             >
                 <PrdPreviewPanel
