@@ -70,6 +70,21 @@ test('successful connect returns welcome response with reverb config', function 
     expect($sessionId)->toMatch('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/');
 });
 
+test('connect returns reverb port as integer', function () {
+    Event::fake([DeviceConnected::class]);
+
+    $token = generateDeviceToken($this->device);
+
+    $response = $this->postJson('/api/device/connect', [], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response->assertOk();
+
+    $port = $response->json('reverb.port');
+    expect($port)->toBeInt();
+});
+
 test('connect updates device record with metadata', function () {
     Event::fake([DeviceConnected::class]);
 
