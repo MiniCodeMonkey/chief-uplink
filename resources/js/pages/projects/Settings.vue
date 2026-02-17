@@ -84,7 +84,7 @@ const chiefMessages = useChiefMessages(props.deviceId);
 
 chiefMessages.on('settings_response', (message) => {
     const payload = message.payload as Record<string, unknown>;
-    if (payload.project_slug !== props.projectSlug) return;
+    if (payload.project !== props.projectSlug) return;
 
     const settings = payload.settings as ProjectSettings;
     applySettings(settings);
@@ -94,7 +94,7 @@ chiefMessages.on('settings_response', (message) => {
 
 chiefMessages.on('settings_updated', (message) => {
     const payload = message.payload as Record<string, unknown>;
-    if (payload.project_slug !== props.projectSlug) return;
+    if (payload.project !== props.projectSlug) return;
 
     const settings = payload.settings as ProjectSettings;
     applySettings(settings);
@@ -138,7 +138,7 @@ async function loadSettings() {
     loadError.value = null;
 
     const result = await sendCommand(props.deviceId, 'get_settings', {
-        project_slug: props.projectSlug,
+        project: props.projectSlug,
     });
 
     if (!result) {
@@ -167,14 +167,12 @@ async function saveSettings() {
     isSaving.value = true;
 
     const result = await sendCommand(props.deviceId, 'update_settings', {
-        project_slug: props.projectSlug,
-        settings: {
-            max_iterations: maxIterations.value,
-            auto_commit: autoCommit.value,
-            commit_prefix: commitPrefix.value,
-            claude_model: claudeModel.value,
-            test_command: testCommand.value,
-        },
+        project: props.projectSlug,
+        max_iterations: maxIterations.value,
+        auto_commit: autoCommit.value,
+        commit_prefix: commitPrefix.value,
+        claude_model: claudeModel.value,
+        test_command: testCommand.value,
     });
 
     if (!result) {

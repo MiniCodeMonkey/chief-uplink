@@ -1,0 +1,6 @@
+{
+  "type": "get_settings",
+  "payload": {
+    "project": "my-project"
+  }
+}

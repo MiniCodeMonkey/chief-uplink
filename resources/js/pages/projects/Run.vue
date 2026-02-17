@@ -277,7 +277,7 @@ async function handleStartRun() {
     optimisticState.value = 'starting';
 
     const result = await sendCommand(props.deviceId, 'start_run', {
-        project_slug: props.projectSlug,
+        project: props.projectSlug,
     });
 
     if (!result) {
@@ -293,7 +293,7 @@ async function handlePauseRun() {
     optimisticState.value = 'pausing';
 
     const result = await sendCommand(props.deviceId, 'pause_run', {
-        project_slug: props.projectSlug,
+        project: props.projectSlug,
     });
 
     if (!result) {
@@ -307,7 +307,7 @@ async function handleResumeRun() {
     optimisticState.value = 'resuming';
 
     const result = await sendCommand(props.deviceId, 'resume_run', {
-        project_slug: props.projectSlug,
+        project: props.projectSlug,
     });
 
     if (!result) {
@@ -322,7 +322,7 @@ async function handleStopRun() {
     optimisticState.value = 'stopping';
 
     const result = await sendCommand(props.deviceId, 'stop_run', {
-        project_slug: props.projectSlug,
+        project: props.projectSlug,
     });
 
     if (!result) {

@@ -1,0 +1,7 @@
+{
+  "type": "get_diffs",
+  "payload": {
+    "project": "my-project",
+    "story_id": "US-001"
+  }
+}

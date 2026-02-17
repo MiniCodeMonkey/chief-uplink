@@ -43,7 +43,7 @@ onMounted(() => {
 
     on('prds_response', (message) => {
         const payload = message.payload as Record<string, unknown>;
-        if (payload.project_slug !== props.projectSlug) return;
+        if (payload.project !== props.projectSlug) return;
 
         if (loadTimeout) clearTimeout(loadTimeout);
         prds.value = (payload.prds as PrdItem[]) ?? [];
@@ -82,7 +82,7 @@ async function loadPrds() {
     }, 15000);
 
     const result = await sendCommand(props.deviceId, 'get_prds', {
-        project_slug: props.projectSlug,
+        project: props.projectSlug,
     });
 
     if (!result) {
@@ -127,7 +127,7 @@ function statusLabel(status: string): string {
 
 function handleRun(prdId: string) {
     sendCommand(props.deviceId, 'start_run', {
-        project_slug: props.projectSlug,
+        project: props.projectSlug,
         prd_id: prdId,
     });
     router.visit(`/projects/${props.projectSlug}/run`);

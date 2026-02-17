@@ -247,3 +247,122 @@ test('CommandRelayController dispatches in fixture format', function () {
         return true;
     });
 });
+
+/*
+|--------------------------------------------------------------------------
+| server-to-cli: command_get_prds, command_get_settings, command_get_diffs
+|--------------------------------------------------------------------------
+*/
+
+test('command_get_prds fixture matches relay format', function () {
+    $fixture = loadFixture('server-to-cli/command_get_prds.json');
+
+    expect($fixture)->toHaveKey('type')
+        ->toHaveKey('payload');
+    expect($fixture['type'])->toBe('get_prds');
+    expect($fixture['payload'])->toHaveKey('project');
+    expect($fixture['payload']['project'])->toBe('my-project');
+});
+
+test('command_get_settings fixture matches relay format', function () {
+    $fixture = loadFixture('server-to-cli/command_get_settings.json');
+
+    expect($fixture)->toHaveKey('type')
+        ->toHaveKey('payload');
+    expect($fixture['type'])->toBe('get_settings');
+    expect($fixture['payload'])->toHaveKey('project');
+    expect($fixture['payload']['project'])->toBe('my-project');
+});
+
+test('command_get_diffs fixture matches relay format', function () {
+    $fixture = loadFixture('server-to-cli/command_get_diffs.json');
+
+    expect($fixture)->toHaveKey('type')
+        ->toHaveKey('payload');
+    expect($fixture['type'])->toBe('get_diffs');
+    expect($fixture['payload'])->toHaveKey('project');
+    expect($fixture['payload'])->toHaveKey('story_id');
+});
+
+/*
+|--------------------------------------------------------------------------
+| cli-to-server: response fixtures accepted by messages endpoint
+|--------------------------------------------------------------------------
+*/
+
+test('prds_response fixture is accepted by messages endpoint', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateContractToken($this->device);
+    $fixture = loadFixture('cli-to-server/prds_response.json');
+
+    $response = $this->postJson('/api/device/messages', [
+        'batch_id' => \Illuminate\Support\Str::uuid()->toString(),
+        'messages' => [$fixture],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response->assertOk()
+        ->assertJson(['accepted' => 1]);
+
+    Event::assertDispatched(ChiefMessageReceived::class, function ($event) {
+        expect($event->message['type'])->toBe('prds_response');
+        expect($event->message['payload']['project'])->toBe('my-project');
+        expect($event->message['payload']['prds'])->toBeArray()->toHaveCount(2);
+
+        return true;
+    });
+});
+
+test('settings_response fixture is accepted by messages endpoint', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateContractToken($this->device);
+    $fixture = loadFixture('cli-to-server/settings_response.json');
+
+    $response = $this->postJson('/api/device/messages', [
+        'batch_id' => \Illuminate\Support\Str::uuid()->toString(),
+        'messages' => [$fixture],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response->assertOk()
+        ->assertJson(['accepted' => 1]);
+
+    Event::assertDispatched(ChiefMessageReceived::class, function ($event) {
+        expect($event->message['type'])->toBe('settings_response');
+        expect($event->message['payload']['project'])->toBe('my-project');
+        expect($event->message['payload']['settings'])->toBeArray();
+        expect($event->message['payload']['settings']['max_iterations'])->toBe(5);
+
+        return true;
+    });
+});
+
+test('diffs_response fixture is accepted by messages endpoint', function () {
+    Event::fake([ChiefMessageReceived::class]);
+
+    $token = generateContractToken($this->device);
+    $fixture = loadFixture('cli-to-server/diffs_response.json');
+
+    $response = $this->postJson('/api/device/messages', [
+        'batch_id' => \Illuminate\Support\Str::uuid()->toString(),
+        'messages' => [$fixture],
+    ], [
+        'Authorization' => 'Bearer '.$token,
+    ]);
+
+    $response->assertOk()
+        ->assertJson(['accepted' => 1]);
+
+    Event::assertDispatched(ChiefMessageReceived::class, function ($event) {
+        expect($event->message['type'])->toBe('diffs_response');
+        expect($event->message['payload']['project'])->toBe('my-project');
+        expect($event->message['payload']['story_id'])->toBe('US-001');
+        expect($event->message['payload']['files'])->toBeArray()->toHaveCount(1);
+
+        return true;
+    });
+});

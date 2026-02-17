@@ -271,7 +271,7 @@ async function handleSend() {
         if (isRefineMode.value && props.prdId) {
             // Refine existing PRD
             result = await sendCommand(props.deviceId, 'refine_prd', {
-                project_slug: props.projectSlug,
+                project: props.projectSlug,
                 session_id: sessionId.value,
                 prd_id: props.prdId,
                 message: text,
@@ -279,7 +279,7 @@ async function handleSend() {
         } else {
             // Create new PRD
             result = await sendCommand(props.deviceId, 'new_prd', {
-                project_slug: props.projectSlug,
+                project: props.projectSlug,
                 session_id: sessionId.value,
                 message: text,
             });
@@ -297,7 +297,7 @@ async function handleSend() {
     } else {
         // Subsequent message — send via prd_message (resets inactivity timer)
         const result = await sendCommand(props.deviceId, 'prd_message', {
-            project_slug: props.projectSlug,
+            project: props.projectSlug,
             session_id: sessionId.value,
             message: text,
         });
@@ -332,7 +332,7 @@ async function handleSaveAndClose() {
     saveStep.value = 'saving';
 
     const closePayload: Record<string, unknown> = {
-        project_slug: props.projectSlug,
+        project: props.projectSlug,
         session_id: sessionId.value,
         save: true,
     };
@@ -376,7 +376,7 @@ async function executeSaveAndRun() {
     saveStep.value = 'saving';
 
     const closePayload: Record<string, unknown> = {
-        project_slug: props.projectSlug,
+        project: props.projectSlug,
         session_id: sessionId.value,
         save: true,
     };
@@ -401,7 +401,7 @@ async function executeSaveAndRun() {
     saveStep.value = 'starting';
 
     const startPayload: Record<string, unknown> = {
-        project_slug: props.projectSlug,
+        project: props.projectSlug,
     };
     // Pass the PRD ID so chief knows which PRD to run
     if (isRefineMode.value && props.prdId) {
@@ -447,14 +447,14 @@ async function handleResume() {
     let result;
     if (isRefineMode.value && props.prdId) {
         result = await sendCommand(props.deviceId, 'refine_prd', {
-            project_slug: props.projectSlug,
+            project: props.projectSlug,
             session_id: sessionId.value,
             prd_id: props.prdId,
             message: 'Continue from where we left off. The session timed out.',
         });
     } else {
         result = await sendCommand(props.deviceId, 'new_prd', {
-            project_slug: props.projectSlug,
+            project: props.projectSlug,
             session_id: sessionId.value,
             message: 'Continue from where we left off. The session timed out.',
         });
@@ -502,7 +502,7 @@ function handleBack() {
         if (confirm('You have an active session. Leave without saving?')) {
             // Kill the session without saving
             const closePayload: Record<string, unknown> = {
-                project_slug: props.projectSlug,
+                project: props.projectSlug,
                 session_id: sessionId.value,
                 save: false,
             };

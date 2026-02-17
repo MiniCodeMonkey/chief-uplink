@@ -99,7 +99,7 @@ onMounted(() => {
 
     on('diffs_response', (message) => {
         const payload = message.payload as Record<string, unknown>;
-        if (payload.project_slug !== props.projectSlug) return;
+        if (payload.project !== props.projectSlug) return;
 
         const storyId = payload.story_id as string;
         const files = (payload.files as DiffFile[]) ?? [];
@@ -164,7 +164,7 @@ async function fetchStoryDiff(storyId: string) {
     delete storyDiffErrors.value[storyId];
 
     const result = await sendCommand(props.deviceId, 'get_diffs', {
-        project_slug: props.projectSlug,
+        project: props.projectSlug,
         story_id: storyId,
     });
 
