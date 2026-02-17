@@ -31,7 +31,8 @@
         "Existing unit tests updated and passing"
       ],
       "priority": 2,
-      "passes": false
+      "passes": false,
+      "inProgress": true
     },
     {
       "id": "US-003",
