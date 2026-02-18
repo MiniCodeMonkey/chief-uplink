@@ -653,15 +653,15 @@ async function replayBufferedMessages() {
             for (const entry of bufferedMessages) {
                 const msg = entry.message as Record<string, unknown>;
                 const type = msg.type as string;
+                const msgPayload = msg.payload as Record<string, unknown> | undefined;
 
-                // Only process messages for our current session
-                const msgSessionId = msg.session_id as string | undefined;
+                // Only process messages for our current session (session_id lives in payload)
+                const msgSessionId = (msgPayload?.session_id ?? msg.session_id) as string | undefined;
                 if (msgSessionId && msgSessionId !== sessionId.value) continue;
 
                 if (type === 'prd_output') {
                     // CLI sends content in payload.content (per CLI protocol)
-                    const msgPayload = msg.payload as Record<string, unknown> | undefined;
-                    const text = (msgPayload?.content ?? msgPayload?.text ?? msg.text) as string;
+                    const text = (msgPayload?.content ?? msgPayload?.text) as string;
                     if (text) {
                         const lastMsg =
                             messages.value[messages.value.length - 1];
@@ -727,12 +727,12 @@ onMounted(() => {
 
     // Handle PRD chat output (claude streaming)
     on('prd_output', (message) => {
-        // CLI messages may not include session_id — only reject if it's present and mismatched
-        const rawMsg = message.message as Record<string, unknown>;
-        if (rawMsg.session_id && rawMsg.session_id !== sessionId.value) return;
+        // session_id lives inside payload (per CLI protocol)
+        const payload = message.payload as Record<string, unknown> | null;
+        const msgSessionId = payload?.session_id as string | undefined;
+        if (msgSessionId && msgSessionId !== sessionId.value) return;
 
         // CLI sends content in payload.content (per CLI protocol)
-        const payload = message.payload as Record<string, unknown> | null;
         const text = (payload?.content ?? payload?.text) as string;
         if (!text) return;
 
@@ -753,9 +753,10 @@ onMounted(() => {
 
     // Handle Claude response complete
     on('prd_response_complete', (message) => {
-        // CLI messages may not include session_id — only reject if present and mismatched
-        const rawMsg = message.message as Record<string, unknown>;
-        if (rawMsg.session_id && rawMsg.session_id !== sessionId.value) return;
+        // session_id lives inside payload (per CLI protocol)
+        const payload = message.payload as Record<string, unknown> | null;
+        const msgSessionId = payload?.session_id as string | undefined;
+        if (msgSessionId && msgSessionId !== sessionId.value) return;
 
         isClaudeResponding.value = false;
         clearResponseTimeout();
