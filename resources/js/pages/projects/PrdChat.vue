@@ -659,7 +659,9 @@ async function replayBufferedMessages() {
                 if (msgSessionId && msgSessionId !== sessionId.value) continue;
 
                 if (type === 'prd_output') {
-                    const text = msg.text as string;
+                    // CLI sends content in payload.content (per CLI protocol)
+                    const msgPayload = msg.payload as Record<string, unknown> | undefined;
+                    const text = (msgPayload?.content ?? msgPayload?.text ?? msg.text) as string;
                     if (text) {
                         const lastMsg =
                             messages.value[messages.value.length - 1];
@@ -725,10 +727,13 @@ onMounted(() => {
 
     // Handle PRD chat output (claude streaming)
     on('prd_output', (message) => {
-        const payload = message.message as Record<string, unknown>;
-        if (payload.session_id !== sessionId.value) return;
+        // CLI messages may not include session_id — only reject if it's present and mismatched
+        const rawMsg = message.message as Record<string, unknown>;
+        if (rawMsg.session_id && rawMsg.session_id !== sessionId.value) return;
 
-        const text = payload.text as string;
+        // CLI sends content in payload.content (per CLI protocol)
+        const payload = message.payload as Record<string, unknown> | null;
+        const text = (payload?.content ?? payload?.text) as string;
         if (!text) return;
 
         // Append to the last Claude message if streaming
@@ -748,8 +753,9 @@ onMounted(() => {
 
     // Handle Claude response complete
     on('prd_response_complete', (message) => {
-        const payload = message.message as Record<string, unknown>;
-        if (payload.session_id !== sessionId.value) return;
+        // CLI messages may not include session_id — only reject if present and mismatched
+        const rawMsg = message.message as Record<string, unknown>;
+        if (rawMsg.session_id && rawMsg.session_id !== sessionId.value) return;
 
         isClaudeResponding.value = false;
         clearResponseTimeout();
