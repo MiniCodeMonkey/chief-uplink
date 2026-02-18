@@ -187,11 +187,12 @@ class E2ESetupCommand extends Command
         ]));
 
         file_put_contents($prdDir.'/prd.json', json_encode([
-            'name' => 'Feature Auth',
-            'stories' => [
-                ['id' => 'US-001', 'title' => 'User Login', 'status' => 'completed', 'description' => 'Implement login form'],
-                ['id' => 'US-002', 'title' => 'User Registration', 'status' => 'pending', 'description' => 'Implement registration'],
-                ['id' => 'US-003', 'title' => 'Password Reset', 'status' => 'pending', 'description' => 'Implement password reset'],
+            'project' => 'Feature Auth',
+            'description' => 'Authentication feature for the test project.',
+            'userStories' => [
+                ['id' => 'US-001', 'title' => 'User Login', 'description' => 'Implement login form', 'acceptanceCriteria' => [], 'priority' => 1, 'passes' => true, 'inProgress' => false],
+                ['id' => 'US-002', 'title' => 'User Registration', 'description' => 'Implement registration', 'acceptanceCriteria' => [], 'priority' => 2, 'passes' => false, 'inProgress' => false],
+                ['id' => 'US-003', 'title' => 'Password Reset', 'description' => 'Implement password reset', 'acceptanceCriteria' => [], 'priority' => 3, 'passes' => false, 'inProgress' => false],
             ],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
 

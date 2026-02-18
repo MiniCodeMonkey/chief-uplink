@@ -117,7 +117,7 @@ describe('PRD Chat', function () {
                 // Assert chat content is visible (response text rendered)
                 ->assertPresent('.prose-chat');
         });
-    })->timeout(180); // 3-minute overall timeout for Claude API latency
+    });
 });
 
 describe('Settings', function () {

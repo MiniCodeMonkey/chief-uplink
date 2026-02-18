@@ -2,7 +2,10 @@
 
 pest()->extend(Tests\DuskTestCase::class)
     ->use(Illuminate\Foundation\Testing\DatabaseTruncation::class)
-    ->in('Browser', 'LiveE2E');
+    ->in('Browser');
+
+pest()->extend(Tests\DuskTestCase::class)
+    ->in('LiveE2E');
 
 /*
 |--------------------------------------------------------------------------

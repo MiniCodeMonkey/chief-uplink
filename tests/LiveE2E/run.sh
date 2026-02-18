@@ -12,7 +12,7 @@ EXIT_CODE=1
 cleanup() {
     echo ""
     echo "=== Cleaning up ==="
-    for pid in "${PIDS[@]}"; do
+    for pid in "${PIDS[@]+"${PIDS[@]}"}"; do
         kill "$pid" 2>/dev/null && wait "$pid" 2>/dev/null || true
     done
     # Don't stop Sail containers (they're shared infra)
@@ -21,6 +21,7 @@ cleanup() {
     if [[ -f "$PROJECT_DIR/.env.bak.e2e" ]]; then
         mv "$PROJECT_DIR/.env.bak.e2e" "$PROJECT_DIR/.env"
     fi
+    rm -f "$PROJECT_DIR/.env.dusk.testing"
     echo "Cleanup complete. Exit code: $EXIT_CODE"
 }
 trap cleanup EXIT
@@ -40,7 +41,7 @@ echo "=== Starting Sail (PostgreSQL + Redis) ==="
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL..."
 for i in $(seq 1 30); do
-    if ./vendor/bin/sail exec pgsql pg_isready -U sail 2>/dev/null; then
+    if ./vendor/bin/sail exec -T pgsql pg_isready -U sail 2>/dev/null; then
         echo "PostgreSQL ready after ${i}s"
         break
     fi
@@ -57,10 +58,12 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
     cp "$PROJECT_DIR/.env" "$PROJECT_DIR/.env.bak.e2e"
 fi
 cp "$PROJECT_DIR/.env.dusk.e2e" "$PROJECT_DIR/.env"
+# Dusk loads .env.dusk.{APP_ENV} instead of .env — ensure it uses the e2e config
+cp "$PROJECT_DIR/.env.dusk.e2e" "$PROJECT_DIR/.env.dusk.testing"
 
 # Create test database
-./vendor/bin/sail exec pgsql psql -U sail -c "DROP DATABASE IF EXISTS chief_e2e_test;" 2>/dev/null || true
-./vendor/bin/sail exec pgsql psql -U sail -c "CREATE DATABASE chief_e2e_test;" 2>/dev/null
+./vendor/bin/sail exec -T pgsql psql -U sail -d postgres -c "DROP DATABASE IF EXISTS chief_e2e_test;" 2>/dev/null || true
+./vendor/bin/sail exec -T pgsql psql -U sail -d postgres -c "CREATE DATABASE chief_e2e_test;" 2>/dev/null
 
 # Run migrations
 php artisan migrate --force --no-interaction
@@ -72,6 +75,10 @@ SETUP_JSON=$(php artisan e2e:setup --workspace="$E2E_WORKSPACE" 2>&1 | tail -1)
 echo "Setup: $SETUP_JSON"
 DEVICE_ID=$(echo "$SETUP_JSON" | php -r 'echo json_decode(file_get_contents("php://stdin"))->device_id;')
 echo "Device ID: $DEVICE_ID"
+
+# --- Kill stale processes on our ports ---
+lsof -ti :$APP_PORT | xargs kill 2>/dev/null || true
+lsof -ti :$REVERB_PORT | xargs kill 2>/dev/null || true
 
 # --- Build frontend ---
 echo "=== Building frontend assets ==="
@@ -91,6 +98,8 @@ sleep 2
 
 # --- Start chief serve ---
 echo "=== Starting chief serve ==="
+# Symlink real user's Claude Code config so spawned `claude` subprocesses can authenticate
+ln -sf "$HOME/.claude" "$E2E_WORKSPACE/.chief-home/.claude"
 HOME="$E2E_WORKSPACE/.chief-home" \
     chief serve \
     --workspace="$E2E_WORKSPACE/projects" \
