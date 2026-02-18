@@ -96,11 +96,62 @@ php artisan serve --port=$APP_PORT --no-reload &
 PIDS+=($!)
 sleep 2
 
+# --- Create mock claude binary for E2E testing ---
+# The real claude CLI can't run in the test sandbox (no auth tokens), so we use a
+# mock that simulates PRD output. This tests the full integration pipeline:
+# web app → CLI → subprocess → output streaming → browser.
+MOCK_CLAUDE="$E2E_WORKSPACE/bin/mock-claude"
+mkdir -p "$E2E_WORKSPACE/bin"
+cat > "$MOCK_CLAUDE" << 'MOCK_SCRIPT'
+#!/bin/sh
+# Mock claude CLI for E2E testing — simulates `claude -p --dangerously-skip-permissions`
+# Outputs PRD-like markdown content, then exits.
+# Uses /bin/sh (not bash) for portability. No stdin reading to avoid pipe issues.
+sleep 1
+echo "# Todo List Application PRD"
+echo ""
+echo "## Overview"
+echo "A simple todo list application with add and delete functionality."
+echo ""
+echo "## User Stories"
+echo ""
+echo "### US-001: Add Todo Item"
+echo "**As a** user"
+echo "**I want to** add new todo items to my list"
+echo "**So that** I can track tasks I need to complete"
+echo ""
+echo "#### Acceptance Criteria"
+echo "- User can enter text for a new todo item"
+echo "- Todo item appears in the list after submission"
+echo "- Input field clears after adding"
+echo ""
+echo "### US-002: Delete Todo Item"
+echo "**As a** user"
+echo "**I want to** delete todo items from my list"
+echo "**So that** I can remove completed or unwanted tasks"
+echo ""
+echo "#### Acceptance Criteria"
+echo "- Each todo item has a delete button"
+echo "- Clicking delete removes the item from the list"
+echo "- Deletion is immediate without confirmation"
+echo ""
+echo "### US-003: View Todo List"
+echo "**As a** user"
+echo "**I want to** see all my todo items in a list"
+echo "**So that** I can review what needs to be done"
+echo ""
+echo "#### Acceptance Criteria"
+echo "- All todo items are displayed in a vertical list"
+echo "- Items are shown in the order they were added"
+echo "- Empty state message when no items exist"
+exit 0
+MOCK_SCRIPT
+chmod +x "$MOCK_CLAUDE"
+
 # --- Start chief serve ---
 echo "=== Starting chief serve ==="
-# Symlink real user's Claude Code config so spawned `claude` subprocesses can authenticate
-ln -sf "$HOME/.claude" "$E2E_WORKSPACE/.chief-home/.claude"
 HOME="$E2E_WORKSPACE/.chief-home" \
+    CHIEF_CLAUDE_BINARY="$MOCK_CLAUDE" \
     chief serve \
     --workspace="$E2E_WORKSPACE/projects" \
     --server-url="http://127.0.0.1:$APP_PORT" \
