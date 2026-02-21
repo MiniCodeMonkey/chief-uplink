@@ -59,7 +59,8 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74,#86efac\" \"./vendor/bin/sail up\" \"./vendor/bin/sail artisan queue:listen --tries=1 --timeout=0\" \"./vendor/bin/sail artisan pail --timeout=0\" \"./vendor/bin/sail npm run dev\" \"./vendor/bin/sail artisan reverb:start\" --names=server,queue,logs,vite,reverb --kill-others"
+            "./vendor/bin/sail up -d",
+            "npx concurrently -c \"#c4b5fd,#fb7185,#fdba74,#86efac\" \"./vendor/bin/sail artisan queue:listen --tries=1 --timeout=0\" \"./vendor/bin/sail artisan pail --timeout=0\" \"./vendor/bin/sail npm run dev\" \"./vendor/bin/sail artisan reverb:start\" --names=queue,logs,vite,reverb --kill-others"
         ],
         "dev:ssr": [
             "./vendor/bin/sail npm run build:ssr",
