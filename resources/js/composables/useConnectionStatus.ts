@@ -1,5 +1,6 @@
 import { usePage } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useChiefCommands } from '@/composables/useChiefCommands';
 import type { DeviceSummary } from '@/types';
 
 /**
@@ -39,6 +40,7 @@ export function formatRelativeTime(dateString: string): string {
  */
 export function useConnectionStatus(deviceId?: () => number | null) {
     const page = usePage();
+    const { chiefServeCommand } = useChiefCommands();
     const now = ref(Date.now());
     let tickInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -99,7 +101,7 @@ export function useConnectionStatus(deviceId?: () => number | null) {
                 }
                 return 'Offline';
             case 'never-connected':
-                return 'Run `chief serve` to connect';
+                return `Run \`${chiefServeCommand.value}\` to connect`;
             default:
                 return null;
         }

@@ -249,6 +249,7 @@ class DeviceOAuthController extends Controller
             'expires_in' => 3600,
             'refresh_token' => $refreshToken,
             'device_id' => $device->id,
+            'user' => $user->email,
             'ws_url' => $this->buildWsUrl(),
         ]);
     }

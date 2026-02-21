@@ -25,6 +25,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusDot } from '@/components/ui/status-dot';
+import { useChiefCommands } from '@/composables/useChiefCommands';
 import { useCommandRelay } from '@/composables/useCommandRelay';
 import {
     formatRelativeTime,
@@ -40,6 +41,7 @@ interface DeviceWithProjects extends DeviceSummary {
 }
 
 const page = usePage();
+const { chiefLoginCommand, chiefServeCommand } = useChiefCommands();
 const { sendCommand } = useCommandRelay();
 const { isOnline, isOffline, isNeverConnected, selectedDevice, statusText } =
     useConnectionStatus();
@@ -385,7 +387,7 @@ const isLoading = computed(() => page.props.devices === undefined);
                 v-else-if="!hasDevices"
                 :icon="FolderPlus"
                 title="No devices connected"
-                description="Connect a device by running `chief login` on your machine, or deploy a cloud server to get started."
+                :description="`Connect a device by running \`${chiefLoginCommand}\` on your machine, or deploy a cloud server to get started.`"
                 class="flex-1"
             >
                 <template #action>
@@ -413,7 +415,7 @@ const isLoading = computed(() => page.props.devices === undefined);
                 v-else-if="showNeverConnectedEmpty"
                 :icon="Monitor"
                 title="Server has never connected"
-                description="Run `chief serve` on your device to connect it. Once connected, your projects will appear here."
+                :description="`Run \`${chiefServeCommand}\` on your device to connect it. Once connected, your projects will appear here.`"
                 class="flex-1"
             >
                 <template #action>

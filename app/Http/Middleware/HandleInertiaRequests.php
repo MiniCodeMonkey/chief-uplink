@@ -46,6 +46,7 @@ class HandleInertiaRequests extends Middleware
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
             ],
+            'chiefServerUrl' => $this->getChiefServerUrl(),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'devices' => fn () => $this->getDevices($request),
             'selectedDeviceId' => fn () => $this->getSelectedDeviceId($request),
@@ -101,6 +102,18 @@ class HandleInertiaRequests extends Middleware
         $cookie = $request->cookie('selected_device_id');
 
         return $cookie ? (int) $cookie : null;
+    }
+
+    private function getChiefServerUrl(): ?string
+    {
+        $url = config('app.url');
+        $host = parse_url($url, PHP_URL_HOST);
+
+        if ($host === 'uplink.chiefloop.com') {
+            return null;
+        }
+
+        return $url;
     }
 
     private function shouldShowOnboarding(Request $request): bool

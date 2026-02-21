@@ -18,6 +18,7 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string;
             auth: Auth;
+            chiefServerUrl: string | null;
             flash: {
                 success?: string;
             };

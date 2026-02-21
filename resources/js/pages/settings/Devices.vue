@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatusDot } from '@/components/ui/status-dot';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useChiefCommands } from '@/composables/useChiefCommands';
 import { isVersionCompatible, formatVersion } from '@/composables/useVersionCompatibility';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
@@ -31,6 +32,7 @@ defineProps<{
 
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string });
+const { chiefLoginCommand } = useChiefCommands();
 
 const deauthorizeTarget = ref<Device | null>(null);
 const showConfirmDialog = ref(false);
@@ -233,7 +235,7 @@ function formatOs(os: string | null): string {
                     v-else
                     :icon="Monitor"
                     title="No devices authorized"
-                    description="Run `chief login` on your machine to get started."
+                    :description="`Run \`${chiefLoginCommand}\` on your machine to get started.`"
                 />
             </div>
 

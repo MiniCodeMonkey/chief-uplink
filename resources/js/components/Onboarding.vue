@@ -10,17 +10,17 @@ import { computed, ref, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { StatusDot } from '@/components/ui/status-dot';
+import { useChiefCommands } from '@/composables/useChiefCommands';
 import { usePushNotifications } from '@/composables/usePushNotifications';
 import type { DeviceSummary } from '@/types';
 
 const page = usePage();
 const { permission, isSubscribed, subscribe } = usePushNotifications();
+const { chiefLoginCommand } = useChiefCommands();
 
 const showCelebration = ref(false);
 const celebrationDone = ref(false);
 const notificationDismissed = ref(false);
-
-const chiefLoginCommand = 'chief login';
 
 const devices = computed(
     () => (page.props.devices as (DeviceSummary & { projects: unknown[] })[]) || [],

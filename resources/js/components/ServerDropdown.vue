@@ -3,6 +3,7 @@ import { usePage } from '@inertiajs/vue3';
 import { ChevronDown, Server } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { StatusDot } from '@/components/ui/status-dot';
+import { useChiefCommands } from '@/composables/useChiefCommands';
 import { formatRelativeTime } from '@/composables/useConnectionStatus';
 import type { DeviceSummary } from '@/types';
 
@@ -18,6 +19,7 @@ const open = ref(false);
 const triggerRef = ref<HTMLButtonElement | null>(null);
 
 const page = usePage();
+const { chiefLoginCommand, chiefServeCommand } = useChiefCommands();
 const devices = computed(
     () =>
         (page.props.devices as (DeviceSummary & { projects: unknown[] })[]) ||
@@ -120,7 +122,7 @@ function handleKeydown(event: KeyboardEvent) {
                         >Run
                         <code
                             class="rounded bg-muted px-1 py-0.5 font-mono text-xs"
-                            >chief login</code
+                            >{{ chiefLoginCommand }}</code
                         >
                         to connect.</span
                     >
@@ -175,7 +177,7 @@ function handleKeydown(event: KeyboardEvent) {
                             class="text-xs text-muted-foreground"
                         >
                             Run
-                            <code class="font-mono">chief serve</code> to
+                            <code class="font-mono">{{ chiefServeCommand }}</code> to
                             connect
                         </span>
                     </div>
