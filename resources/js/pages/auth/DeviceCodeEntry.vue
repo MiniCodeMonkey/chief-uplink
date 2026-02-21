@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { Head, useForm, usePage } from '@inertiajs/vue3';
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
 import InputError from '@/components/InputError.vue';
+import { useChiefCommands } from '@/composables/useChiefCommands';
+import { useEcho } from '@/composables/useEcho';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { StatusDot } from '@/components/ui/status-dot';
 import { verify, authorize, deny } from '@/routes/oauth/device';
 
 const props = defineProps<{
@@ -17,6 +20,8 @@ const props = defineProps<{
 }>();
 
 const page = usePage();
+const { chiefServeCommand } = useChiefCommands();
+const { subscribeToUserChannel, subscribeToDeviceChannel, leaveUserChannel, leaveDeviceChannel } = useEcho();
 const successDevice = computed(() => page.props.flash?.success as string | undefined);
 
 const codeInput = ref<InstanceType<typeof Input> | null>(null);
@@ -34,6 +39,10 @@ const denyForm = useForm({
 });
 
 const showSuccess = ref(false);
+const redirectingToDashboard = ref(false);
+let connectedDeviceId: number | null = null;
+let redirectTimeout: ReturnType<typeof setTimeout> | null = null;
+let listeningForDevice = false;
 
 // Keep form data in sync with props when Inertia reuses the component instance
 watch(() => props.confirmDevice, (device) => {
@@ -43,9 +52,50 @@ watch(() => props.confirmDevice, (device) => {
     }
 }, { immediate: true });
 
+function startWaitingForDevice() {
+    if (listeningForDevice) return;
+    listeningForDevice = true;
+
+    subscribeToUserChannel({
+        'device.connected': (data: unknown) => {
+            const payload = data as { deviceId: number };
+            connectedDeviceId = payload.deviceId;
+
+            subscribeToDeviceChannel(payload.deviceId, {
+                'chief.message': (msgData: unknown) => {
+                    const msg = msgData as { type: string };
+                    if (msg.type === 'prds_response') {
+                        doRedirect();
+                    }
+                },
+            });
+
+            // Fallback: redirect after 5s even if prds_response is missed
+            redirectTimeout = setTimeout(doRedirect, 5000);
+        },
+    });
+}
+
+function doRedirect() {
+    if (redirectingToDashboard.value) return;
+    redirectingToDashboard.value = true;
+
+    if (redirectTimeout) {
+        clearTimeout(redirectTimeout);
+        redirectTimeout = null;
+    }
+
+    setTimeout(() => {
+        router.visit('/dashboard');
+    }, 1500);
+}
+
 // Handle flash data arriving via Inertia prop updates (not just on mount)
 watch(successDevice, (val) => {
-    if (val) showSuccess.value = true;
+    if (val) {
+        showSuccess.value = true;
+        startWaitingForDevice();
+    }
 });
 
 function formatCode(value: string): string {
@@ -106,8 +156,19 @@ function denyDevice() {
 onMounted(() => {
     if (successDevice.value) {
         showSuccess.value = true;
+        startWaitingForDevice();
     } else if (!props.confirmDevice) {
         (codeInput.value?.$el as HTMLInputElement | undefined)?.focus();
+    }
+});
+
+onUnmounted(() => {
+    leaveUserChannel();
+    if (connectedDeviceId !== null) {
+        leaveDeviceChannel(connectedDeviceId);
+    }
+    if (redirectTimeout) {
+        clearTimeout(redirectTimeout);
     }
 });
 </script>
@@ -140,8 +201,39 @@ onMounted(() => {
                 <!-- Success state -->
                 <div
                     v-if="showSuccess"
-                    class="w-full rounded-lg border border-border bg-card p-6"
+                    class="relative w-full overflow-hidden rounded-lg border border-border bg-card p-6"
                 >
+                    <!-- Redirecting overlay -->
+                    <Transition
+                        enter-active-class="transition-all duration-500 ease-out"
+                        enter-from-class="opacity-0 scale-90"
+                        enter-to-class="opacity-100 scale-100"
+                    >
+                        <div
+                            v-if="redirectingToDashboard"
+                            class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-lg bg-card text-center"
+                        >
+                            <div class="flex size-12 items-center justify-center rounded-full bg-success/10">
+                                <svg
+                                    class="size-6 text-success"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2.5"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    aria-hidden="true"
+                                >
+                                    <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                            </div>
+                            <div class="space-y-1">
+                                <p class="text-base font-semibold text-foreground">Device connected!</p>
+                                <p class="text-sm text-muted-foreground">Taking you to your dashboard...</p>
+                            </div>
+                        </div>
+                    </Transition>
+
                     <div class="flex flex-col items-center gap-4 text-center">
                         <div class="flex size-12 items-center justify-center rounded-full bg-success/10">
                             <svg
@@ -167,10 +259,22 @@ onMounted(() => {
                             <p class="text-sm text-muted-foreground">
                                 Return to your terminal and run:
                             </p>
-                            <code class="mt-1 block text-sm font-semibold text-foreground">chief serve</code>
+                            <code class="mt-1 block text-sm font-semibold text-foreground">{{ chiefServeCommand }}</code>
+                        </div>
+                        <div v-if="!redirectingToDashboard" class="flex items-center gap-2 text-sm text-muted-foreground">
+                            <StatusDot state="reconnecting" class="size-2 shrink-0" />
+                            <span>Waiting for device to connect...</span>
                         </div>
                     </div>
                 </div>
+
+                <Link
+                    v-if="showSuccess"
+                    href="/dashboard"
+                    class="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                >
+                    Go to dashboard
+                </Link>
 
                 <!-- Confirmation state -->
                 <div
