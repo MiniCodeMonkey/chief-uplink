@@ -55,10 +55,11 @@ class AddSecurityHeaders
         ];
 
         if (app()->environment('local')) {
-            $vitePort = 5173;
-            $directives[1] = "script-src 'self' 'nonce-{$nonce}' http://localhost:{$vitePort} http://[::1]:{$vitePort}";
-            $directives[2] = "style-src 'self' 'nonce-{$nonce}' 'unsafe-inline' https://fonts.bunny.net";
-            $directives[5] = "connect-src 'self' {$wsUrl} ws://localhost:{$vitePort} ws://[::1]:{$vitePort} http://localhost:{$vitePort} http://[::1]:{$vitePort}";
+            $viteUrl = 'http://localhost:5173';
+            $directives[1] = "script-src 'self' 'nonce-{$nonce}' {$viteUrl}";
+            $directives[2] = "style-src 'self' 'unsafe-inline' https://fonts.bunny.net";
+            $directives[3] = "font-src 'self' https://fonts.bunny.net {$viteUrl}";
+            $directives[5] = "connect-src 'self' ws://localhost:{$reverbPort} wss://localhost:{$reverbPort} ws://localhost:5173 http://localhost:5173";
         }
 
         return implode('; ', $directives);
