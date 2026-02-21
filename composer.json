@@ -50,30 +50,32 @@
         "setup": [
             "composer install",
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
-            "@php artisan key:generate",
-            "@php artisan migrate --force",
-            "npm install",
-            "npm run build"
+            "./vendor/bin/sail build --no-cache",
+            "./vendor/bin/sail up -d",
+            "./vendor/bin/sail artisan key:generate",
+            "./vendor/bin/sail artisan migrate --force",
+            "./vendor/bin/sail npm install",
+            "./vendor/bin/sail npm run build"
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74,#86efac\" \"php artisan serve\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm run dev\" \"php artisan reverb:start\" --names=server,queue,logs,vite,reverb --kill-others"
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74,#86efac\" \"./vendor/bin/sail up\" \"./vendor/bin/sail artisan queue:listen --tries=1 --timeout=0\" \"./vendor/bin/sail artisan pail --timeout=0\" \"./vendor/bin/sail npm run dev\" \"./vendor/bin/sail artisan reverb:start\" --names=server,queue,logs,vite,reverb --kill-others"
         ],
         "dev:ssr": [
-            "npm run build:ssr",
+            "./vendor/bin/sail npm run build:ssr",
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" \"php artisan pail --timeout=0\" \"php artisan inertia:start-ssr\" --names=server,queue,logs,ssr --kill-others"
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"./vendor/bin/sail up\" \"./vendor/bin/sail artisan queue:listen --tries=1\" \"./vendor/bin/sail artisan pail --timeout=0\" \"./vendor/bin/sail artisan inertia:start-ssr\" --names=server,queue,logs,ssr --kill-others"
         ],
         "lint": [
-            "pint --parallel"
+            "./vendor/bin/sail bin pint --parallel"
         ],
         "test:lint": [
-            "pint --parallel --test"
+            "./vendor/bin/sail bin pint --parallel --test"
         ],
         "test": [
-            "@php artisan config:clear --ansi",
+            "./vendor/bin/sail artisan config:clear --ansi",
             "@test:lint",
-            "@php artisan test"
+            "./vendor/bin/sail artisan test"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
