@@ -2,9 +2,20 @@
 
 **Remote-control your Chief instances from anywhere.**
 
-Chief Uplink is the companion web interface for [Chief](https://github.com/minicodemonkey/chief) — an AI-powered coding agent. It lets you monitor runs, review progress, manage PRDs, and deploy cloud servers from your browser or phone. The web app performs zero AI work; it acts as a relay, cache, and account system that communicates with Chief servers running on your machines via WebSocket.
+Chief Uplink is a completely optional companion web interface for [Chief](https://github.com/MiniCodeMonkey/chief) — an AI-powered coding agent. Chief is the main application and works perfectly on its own; Uplink adds the ability to monitor and control your Chief instances remotely from a browser or phone. The web app performs zero AI work — it acts as a relay, cache, and account system that communicates with Chief servers running on your machines via WebSocket.
 
-> **Most users should use the hosted version at [chiefloop.com](https://chiefloop.com).** Self-hosting is available for teams that need full control over their infrastructure.
+> **The hosted version is available at [uplink.chiefloop.com](https://uplink.chiefloop.com).** Self-hosting is available for teams that need full control over their infrastructure.
+
+## Relationship to Chief
+
+| | [Chief](https://github.com/MiniCodeMonkey/chief) | Chief Uplink (this repo) |
+|---|---|---|
+| **Role** | The main AI coding agent (CLI) | Optional remote-control addon |
+| **Docs** | [chiefloop.com](https://chiefloop.com) | This README |
+| **Web UI** | — | [uplink.chiefloop.com](https://uplink.chiefloop.com) |
+| **Required?** | Yes | No — Chief works fully without it |
+
+Chief Uplink connects to a running Chief instance over WebSocket. You do **not** need Uplink to use Chief — it simply adds remote monitoring, PRD management, and cloud deployment on top.
 
 <!-- Screenshots / GIF demos will be added here once the UI is built -->
 
