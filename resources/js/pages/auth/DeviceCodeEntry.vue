@@ -103,15 +103,6 @@ function denyDevice() {
     denyForm.post(deny.url());
 }
 
-function resetForm() {
-    verifyForm.reset();
-    verifyForm.clearErrors();
-    showSuccess.value = false;
-    nextTick(() => {
-        (codeInput.value?.$el as HTMLInputElement | undefined)?.focus();
-    });
-}
-
 onMounted(() => {
     if (successDevice.value) {
         showSuccess.value = true;
@@ -172,13 +163,12 @@ onMounted(() => {
                                 <span class="font-medium text-foreground">{{ successDevice }}</span> has been authorized successfully.
                             </p>
                         </div>
-                        <Button
-                            class="mt-2 w-full"
-                            variant="secondary"
-                            @click="resetForm"
-                        >
-                            Authorize another device
-                        </Button>
+                        <div class="mt-2 w-full rounded-md border border-border bg-background p-3">
+                            <p class="text-sm text-muted-foreground">
+                                Return to your terminal and run:
+                            </p>
+                            <code class="mt-1 block text-sm font-semibold text-foreground">chief serve</code>
+                        </div>
                     </div>
                 </div>
 
