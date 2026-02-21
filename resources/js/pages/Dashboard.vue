@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import {
     ChevronDown,
     FolderPlus,
@@ -396,12 +396,14 @@ const isLoading = computed(() => page.props.devices === undefined);
                                 Deploy Server
                             </a>
                         </Button>
-                        <Link
-                            href="/docs/getting-started"
+                        <a
+                            href="https://chiefloop.com/docs/getting-started"
+                            target="_blank"
+                            rel="noopener"
                             class="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
                         >
                             Read the docs
-                        </Link>
+                        </a>
                     </div>
                 </template>
             </EmptyState>
@@ -422,12 +424,14 @@ const isLoading = computed(() => page.props.devices === undefined);
                             <StatusDot state="never-connected" class="size-2" />
                             <span>{{ statusText }}</span>
                         </div>
-                        <Link
-                            href="/docs/remote-monitoring"
+                        <a
+                            href="https://chiefloop.com/docs/remote-monitoring"
+                            target="_blank"
+                            rel="noopener"
                             class="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
                         >
                             Learn about remote monitoring
-                        </Link>
+                        </a>
                     </div>
                 </template>
             </EmptyState>

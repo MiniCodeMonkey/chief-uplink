@@ -42,10 +42,10 @@ defineProps<Props>();
             </Link>
         </DropdownMenuItem>
         <DropdownMenuItem :as-child="true">
-            <Link class="block w-full cursor-pointer" href="/docs">
+            <a class="block w-full cursor-pointer" href="https://chiefloop.com/docs" target="_blank" rel="noopener">
                 <Book class="mr-2 h-4 w-4" />
                 Documentation
-            </Link>
+            </a>
         </DropdownMenuItem>
         <DropdownMenuItem @click="$emit('show-shortcuts')">
             <Keyboard class="mr-2 h-4 w-4" />

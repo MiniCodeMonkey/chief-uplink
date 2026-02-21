@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { ref, onMounted } from 'vue';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
 import { Button } from '@/components/ui/button';
@@ -83,12 +83,14 @@ onMounted(() => {
                     </Button>
                 </div>
 
-                <Link
-                    href="/docs"
+                <a
+                    href="https://chiefloop.com/docs"
+                    target="_blank"
+                    rel="noopener"
                     class="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
                 >
                     Documentation
-                </Link>
+                </a>
             </div>
         </div>
     </div>

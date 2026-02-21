@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import {
     Activity,
     CheckCircle2,
@@ -229,12 +229,14 @@ function navigateToActivityView(event: RecentActivity) {
                             <Plus class="size-4" />
                             New PRD
                         </Button>
-                        <Link
-                            href="/docs/prds"
+                        <a
+                            href="https://chiefloop.com/docs/prds"
+                            target="_blank"
+                            rel="noopener"
                             class="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
                         >
                             Learn about PRDs
-                        </Link>
+                        </a>
                     </div>
                 </template>
             </EmptyState>

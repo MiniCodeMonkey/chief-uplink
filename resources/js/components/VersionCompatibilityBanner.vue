@@ -25,7 +25,9 @@ const { showWarning, deviceVersion, dismiss } =
             <span class="flex-1">
                 This server is running Chief v{{ deviceVersion ? formatVersion(deviceVersion) : 'unknown' }}. Some features may not work.
                 <a
-                    href="/docs"
+                    href="https://chiefloop.com/docs"
+                    target="_blank"
+                    rel="noopener"
                     class="underline underline-offset-2 hover:text-warning/80"
                 >
                     Update instructions
