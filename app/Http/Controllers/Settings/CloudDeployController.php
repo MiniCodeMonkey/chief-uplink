@@ -253,7 +253,7 @@ class CloudDeployController extends Controller
 set -e
 
 # Install Chief CLI
-curl -fsSL https://chiefloop.com/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MiniCodeMonkey/chief/refs/heads/main/install.sh | bash
 
 # Create chief user if not exists
 id -u chief &>/dev/null || useradd -m -s /bin/bash chief
