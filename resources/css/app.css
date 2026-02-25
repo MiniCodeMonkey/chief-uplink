@@ -120,6 +120,7 @@
 
 /* Dark mode: PRD-specified dark palette */
 :root {
+    --surface: oklch(1 0 0);
     --background: oklch(0.985 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
@@ -163,6 +164,7 @@
 }
 
 .dark {
+    --surface: oklch(0.215 0.005 285.82);
     --background: oklch(0.141 0.005 285.82);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.178 0.005 285.82);

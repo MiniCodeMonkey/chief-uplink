@@ -1274,6 +1274,7 @@ const saveButtonLabel = computed(() => {
                         <!-- Desktop send button -->
                         <Button
                             class="hidden lg:flex"
+                            style="height: 2.75rem"
                             :disabled="
                                 !userInput.trim() ||
                                 isClaudeResponding ||
