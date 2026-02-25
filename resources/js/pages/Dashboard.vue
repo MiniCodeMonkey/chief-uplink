@@ -13,7 +13,6 @@ import {
     Plus,
     Rocket,
     Square,
-    X,
 } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 import CloneRepositoryModal from '@/components/CloneRepositoryModal.vue';
@@ -43,8 +42,7 @@ interface DeviceWithProjects extends DeviceSummary {
 const page = usePage();
 const { chiefLoginCommand, chiefServeCommand } = useChiefCommands();
 const { sendCommand } = useCommandRelay();
-const { isOnline, isOffline, isNeverConnected, selectedDevice, statusText } =
-    useConnectionStatus();
+const { isOnline, isNeverConnected, statusText } = useConnectionStatus();
 const { showHint: showLongPressHint, incrementVisitCount, markFeatureUsed } =
     useLongPressHint();
 const { isRefreshing, pullDistance } = usePullToRefresh();
@@ -54,8 +52,6 @@ const cloneModalOpen = ref(false);
 const createProjectModalOpen = ref(false);
 const longPressTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const longPressProjectSlug = ref<string | null>(null);
-const offlineBannerDismissed = ref(false);
-
 onMounted(() => {
     incrementVisitCount();
 });
@@ -92,19 +88,6 @@ const existingProjectNames = computed(() =>
 // Server is not live (offline, reconnecting, or never connected)
 const serverNotLive = computed(() => !isOnline.value);
 
-// Show offline banner when server is offline and banner hasn't been dismissed
-const showOfflineBanner = computed(
-    () => hasDevices.value && isOffline.value && !offlineBannerDismissed.value,
-);
-
-// Offline banner text with last synced time
-const offlineBannerText = computed(() => {
-    if (!selectedDevice.value?.last_connected_at) {
-        return 'Server offline — showing last known state';
-    }
-    return `Server offline — showing last known state from ${formatRelativeTime(selectedDevice.value.last_connected_at)}`;
-});
-
 // Show never-connected empty state when device exists but never connected and has no projects
 const showNeverConnectedEmpty = computed(
     () =>
@@ -112,10 +95,6 @@ const showNeverConnectedEmpty = computed(
         isNeverConnected.value &&
         projects.value.length === 0,
 );
-
-function dismissOfflineBanner() {
-    offlineBannerDismissed.value = true;
-}
 
 function statusLabel(status: string): string {
     switch (status) {
@@ -241,34 +220,6 @@ const isLoading = computed(() => page.props.devices === undefined);
                     <span v-if="isRefreshing">Refreshing...</span>
                     <span v-else-if="pullDistance >= 80">Release to refresh</span>
                     <span v-else>Pull to refresh</span>
-                </div>
-            </Transition>
-
-            <!-- Offline banner -->
-            <Transition
-                enter-active-class="transition duration-[var(--duration-standard)] ease-[var(--ease-gentle)]"
-                enter-from-class="opacity-0 -translate-y-2"
-                enter-to-class="opacity-100 translate-y-0"
-                leave-active-class="transition duration-[var(--duration-standard)] ease-[var(--ease-gentle)]"
-                leave-from-class="opacity-100 translate-y-0"
-                leave-to-class="opacity-0 -translate-y-2"
-            >
-                <div
-                    v-if="showOfflineBanner"
-                    class="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground"
-                    role="status"
-                    aria-live="polite"
-                >
-                    <StatusDot state="offline" class="size-2 shrink-0" />
-                    <span class="flex-1">{{ offlineBannerText }}</span>
-                    <button
-                        class="focus-ring -mr-1 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:text-foreground sm:size-6"
-                        title="Dismiss"
-                        aria-label="Dismiss offline banner"
-                        @click="dismissOfflineBanner"
-                    >
-                        <X class="size-3.5" />
-                    </button>
                 </div>
             </Transition>
 
