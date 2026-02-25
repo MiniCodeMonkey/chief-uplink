@@ -38,6 +38,11 @@ class MessageIngestionController extends Controller
         'log_lines',
         'prds_response',
         'diffs_response',
+        'update_available',
+        'pong',
+        'prd_content',
+        'diff',
+        'hello',
     ];
 
     /**
