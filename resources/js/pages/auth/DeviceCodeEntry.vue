@@ -182,7 +182,7 @@ onUnmounted(() => {
                 <!-- Logo and heading -->
                 <div class="flex flex-col items-center gap-4">
                     <div class="mb-1 flex h-12 w-12 items-center justify-center">
-                        <AppLogoIcon class="size-12 fill-current text-foreground" />
+                        <AppLogoIcon class="size-12" />
                     </div>
                     <div class="space-y-2 text-center">
                         <h1 class="text-2xl font-semibold tracking-tight text-foreground">

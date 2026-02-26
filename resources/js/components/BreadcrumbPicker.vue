@@ -61,7 +61,7 @@ const selectedDeviceProjects = computed(() => {
             class="focus-ring flex shrink-0 items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors duration-[var(--duration-micro)] hover:bg-accent"
             aria-label="Chief home"
         >
-            <AppLogoIcon class="size-5 fill-current text-foreground" />
+            <AppLogoIcon class="size-5" />
             <span class="hidden text-sm font-semibold sm:inline">Chief</span>
         </Link>
 

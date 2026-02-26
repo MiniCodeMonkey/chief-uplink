@@ -72,7 +72,7 @@ const features = [
                 class="mx-auto flex max-w-3xl items-center justify-between px-6 py-3"
             >
                 <div class="flex items-center gap-2.5">
-                    <AppLogoIcon class="size-7 fill-current text-foreground" />
+                    <AppLogoIcon class="size-7" />
                     <span
                         class="text-sm font-semibold tracking-tight text-foreground"
                         >Chief Uplink</span

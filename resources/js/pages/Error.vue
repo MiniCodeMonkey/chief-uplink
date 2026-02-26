@@ -52,7 +52,7 @@ function tryAgain() {
             <div class="flex flex-col items-center gap-8">
                 <div class="flex flex-col items-center gap-4">
                     <Link href="/" class="mb-1 flex h-12 w-12 items-center justify-center">
-                        <AppLogoIcon class="size-12 fill-current text-foreground" />
+                        <AppLogoIcon class="size-12" />
                     </Link>
                     <div class="space-y-2 text-center">
                         <p class="text-6xl font-bold tracking-tight text-muted-foreground/50">
