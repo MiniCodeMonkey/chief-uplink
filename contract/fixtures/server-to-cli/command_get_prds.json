@@ -1,6 +1,0 @@
-{
-  "type": "get_prds",
-  "payload": {
-    "project": "my-project"
-  }
-}

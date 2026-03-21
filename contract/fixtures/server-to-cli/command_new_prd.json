@@ -1,8 +1,0 @@
-{
-  "type": "new_prd",
-  "payload": {
-    "project": "my-project",
-    "session_id": "session-abc",
-    "message": "Build an authentication system"
-  }
-}

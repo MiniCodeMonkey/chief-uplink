@@ -1,9 +1,0 @@
-{
-  "type": "refine_prd",
-  "payload": {
-    "project": "my-project",
-    "session_id": "session-abc",
-    "prd_id": "feature-auth",
-    "message": "Add OAuth support to the PRD"
-  }
-}
