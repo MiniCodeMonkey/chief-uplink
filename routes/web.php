@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeviceController;
+use App\Http\Controllers\FileController;
 use App\Http\Controllers\PrdController;
 use App\Http\Controllers\RunController;
 use App\Http\Controllers\Settings\ProfileSettingsController;
@@ -19,6 +20,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/runs/{run}', [RunController::class, 'show'])->name('runs.show');
     Route::get('/runs/{run}/live', [RunController::class, 'live'])->name('runs.live');
     Route::get('/runs/{run}/diffs', [RunController::class, 'diffs'])->name('runs.diffs');
+    Route::get('/files/{device}/{path?}', [FileController::class, 'show'])->where('path', '.*')->name('files.show');
     Route::get('/settings', [ProfileSettingsController::class, 'index'])->name('settings.profile');
     Route::put('/settings/profile', [ProfileSettingsController::class, 'updateProfile'])->name('settings.profile.update');
     Route::put('/settings/theme', [ProfileSettingsController::class, 'updateTheme'])->name('settings.theme.update');
