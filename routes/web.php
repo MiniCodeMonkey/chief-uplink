@@ -5,7 +5,9 @@ use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\PrdController;
 use App\Http\Controllers\RunController;
+use App\Http\Controllers\Settings\CloudProviderCredentialController;
 use App\Http\Controllers\Settings\ProfileSettingsController;
+use App\Http\Controllers\Settings\SshKeyController;
 use App\Http\Controllers\Settings\TeamSettingsController;
 use App\Http\Controllers\TeamSwitcherController;
 use Illuminate\Support\Facades\Route;
@@ -28,6 +30,13 @@ Route::middleware('auth')->group(function () {
     Route::put('/settings/team/name', [TeamSettingsController::class, 'updateName'])->name('settings.team.update-name');
     Route::delete('/settings/team/members', [TeamSettingsController::class, 'removeMember'])->name('settings.team.remove-member');
     Route::put('/settings/team/transfer', [TeamSettingsController::class, 'transferOwnership'])->name('settings.team.transfer');
+    Route::get('/settings/credentials', [CloudProviderCredentialController::class, 'index'])->name('settings.credentials');
+    Route::post('/settings/credentials', [CloudProviderCredentialController::class, 'store'])->name('settings.credentials.store');
+    Route::put('/settings/credentials/{credential}', [CloudProviderCredentialController::class, 'update'])->name('settings.credentials.update');
+    Route::delete('/settings/credentials/{credential}', [CloudProviderCredentialController::class, 'destroy'])->name('settings.credentials.destroy');
+    Route::post('/settings/ssh-keys', [SshKeyController::class, 'store'])->name('settings.ssh-keys.store');
+    Route::put('/settings/ssh-keys/{sshKey}', [SshKeyController::class, 'update'])->name('settings.ssh-keys.update');
+    Route::delete('/settings/ssh-keys/{sshKey}', [SshKeyController::class, 'destroy'])->name('settings.ssh-keys.destroy');
 });
 
 require __DIR__.'/auth.php';

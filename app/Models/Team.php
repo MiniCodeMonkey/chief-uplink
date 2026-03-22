@@ -49,4 +49,20 @@ class Team extends Model
     {
         return $this->hasMany(Device::class);
     }
+
+    /**
+     * @return HasMany<CloudProviderCredential, $this>
+     */
+    public function cloudProviderCredentials(): HasMany
+    {
+        return $this->hasMany(CloudProviderCredential::class);
+    }
+
+    /**
+     * @return HasMany<SshKey, $this>
+     */
+    public function sshKeys(): HasMany
+    {
+        return $this->hasMany(SshKey::class);
+    }
 }
