@@ -39,6 +39,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/settings/theme', [ProfileSettingsController::class, 'updateTheme'])->name('settings.theme.update');
     Route::get('/settings/team', [TeamSettingsController::class, 'index'])->name('settings.team');
     Route::put('/settings/team/name', [TeamSettingsController::class, 'updateName'])->name('settings.team.update-name');
+    Route::post('/settings/team/invite', [TeamSettingsController::class, 'invite'])->name('settings.team.invite');
     Route::delete('/settings/team/members', [TeamSettingsController::class, 'removeMember'])->name('settings.team.remove-member');
     Route::put('/settings/team/transfer', [TeamSettingsController::class, 'transferOwnership'])->name('settings.team.transfer');
     Route::get('/settings/credentials', [CloudProviderCredentialController::class, 'index'])->name('settings.credentials');

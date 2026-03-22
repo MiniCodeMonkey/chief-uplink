@@ -182,6 +182,78 @@ it('prevents owner from transferring ownership to themselves', function () {
     $response->assertForbidden();
 });
 
+it('allows owner to invite a team member by email', function () {
+    $owner = User::factory()->create();
+    $team = $owner->currentTeam();
+
+    $response = $this->actingAs($owner)->post('/settings/team/invite', [
+        'email' => 'newmember@example.com',
+    ]);
+
+    $response->assertRedirect();
+    $response->assertSessionHas('success');
+    $this->assertDatabaseHas('team_invitations', [
+        'team_id' => $team->id,
+        'email' => 'newmember@example.com',
+    ]);
+});
+
+it('prevents duplicate pending invitations', function () {
+    $owner = User::factory()->create();
+    $team = $owner->currentTeam();
+
+    $team->invitations()->create([
+        'email' => 'existing@example.com',
+        'token' => bin2hex(random_bytes(32)),
+    ]);
+
+    $response = $this->actingAs($owner)->post('/settings/team/invite', [
+        'email' => 'existing@example.com',
+    ]);
+
+    $response->assertSessionHasErrors('email');
+});
+
+it('prevents inviting existing team members', function () {
+    $owner = User::factory()->create();
+    $team = $owner->currentTeam();
+
+    $member = User::factory()->create(['email' => 'member@example.com']);
+    $team->users()->attach($member, ['role' => 'member']);
+
+    $response = $this->actingAs($owner)->post('/settings/team/invite', [
+        'email' => 'member@example.com',
+    ]);
+
+    $response->assertSessionHasErrors('email');
+});
+
+it('prevents non-owner from inviting members', function () {
+    $owner = User::factory()->create();
+    $team = $owner->currentTeam();
+
+    $member = User::factory()->create();
+    $member->teams()->detach();
+    $member->ownedTeams()->delete();
+    $team->users()->attach($member, ['role' => 'member']);
+
+    $response = $this->actingAs($member)->post('/settings/team/invite', [
+        'email' => 'someone@example.com',
+    ]);
+
+    $response->assertForbidden();
+});
+
+it('validates invite email is required', function () {
+    $owner = User::factory()->create();
+
+    $response = $this->actingAs($owner)->post('/settings/team/invite', [
+        'email' => '',
+    ]);
+
+    $response->assertSessionHasErrors('email');
+});
+
 it('requires authentication to access team settings', function () {
     $response = $this->get('/settings/team');
 

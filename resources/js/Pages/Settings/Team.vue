@@ -1,6 +1,7 @@
 <script setup>
 import { Head, useForm, usePage, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import EmptyTeamMembers from '../../Components/EmptyTeamMembers.vue';
 
 const props = defineProps({
     team: Object,
@@ -30,6 +31,8 @@ function cancelEditName() {
     nameForm.clearErrors();
     editingName.value = false;
 }
+
+const hasOtherMembers = computed(() => props.members.length > 1);
 
 const confirmingRemove = ref(null);
 
@@ -113,7 +116,9 @@ function transferOwnership(userId) {
         <section class="mt-8">
             <h2 class="text-lg font-semibold text-text-heading">Members</h2>
 
-            <div class="mt-3 divide-y divide-border rounded-md border border-border">
+            <EmptyTeamMembers v-if="isOwner && !hasOtherMembers" class="mt-3" />
+
+            <div v-else class="mt-3 divide-y divide-border rounded-md border border-border">
                 <div
                     v-for="member in members"
                     :key="member.id"

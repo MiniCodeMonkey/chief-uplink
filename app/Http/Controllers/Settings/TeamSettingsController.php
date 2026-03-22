@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Settings;
 
 use App\Enums\TeamRole;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Settings\InviteTeamMemberRequest;
 use App\Http\Requests\Settings\RemoveTeamMemberRequest;
 use App\Http\Requests\Settings\TransferOwnershipRequest;
 use App\Http\Requests\Settings\UpdateTeamNameRequest;
@@ -56,6 +57,34 @@ class TeamSettingsController extends Controller
         $team->users()->detach($memberId);
 
         return back()->with('success', 'Member removed.');
+    }
+
+    public function invite(InviteTeamMemberRequest $request): RedirectResponse
+    {
+        $team = $request->user()->currentTeam();
+        $email = $request->validated('email');
+
+        $existingInvite = $team->invitations()
+            ->where('email', $email)
+            ->whereNull('accepted_at')
+            ->exists();
+
+        if ($existingInvite) {
+            return back()->withErrors(['email' => 'An invitation has already been sent to this email.']);
+        }
+
+        $alreadyMember = $team->users()->where('email', $email)->exists();
+
+        if ($alreadyMember) {
+            return back()->withErrors(['email' => 'This user is already a team member.']);
+        }
+
+        $team->invitations()->create([
+            'email' => $email,
+            'token' => bin2hex(random_bytes(32)),
+        ]);
+
+        return back()->with('success', 'Invitation sent to '.$email.'.');
     }
 
     public function transferOwnership(TransferOwnershipRequest $request): RedirectResponse
