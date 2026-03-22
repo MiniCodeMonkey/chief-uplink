@@ -41,4 +41,12 @@ class Team extends Model
     {
         return $this->hasMany(TeamInvitation::class);
     }
+
+    /**
+     * @return HasMany<Device, $this>
+     */
+    public function devices(): HasMany
+    {
+        return $this->hasMany(Device::class);
+    }
 }

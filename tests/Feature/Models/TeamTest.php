@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Device;
 use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
@@ -29,4 +30,12 @@ it('has invitations', function () {
     ]);
 
     expect($team->invitations)->toHaveCount(1);
+});
+
+it('has devices', function () {
+    $team = Team::factory()->create();
+
+    Device::factory()->count(2)->create(['team_id' => $team->id]);
+
+    expect($team->devices)->toHaveCount(2);
 });
