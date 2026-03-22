@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['team_id', 'credential_id', 'ssh_key_id', 'name', 'provider', 'region_id', 'size_id', 'status', 'provider_server_id', 'ip_address'])]
 class ManagedServer extends Model
@@ -51,5 +52,13 @@ class ManagedServer extends Model
     public function sshKey(): BelongsTo
     {
         return $this->belongsTo(SshKey::class);
+    }
+
+    /**
+     * @return HasMany<Device, $this>
+     */
+    public function devices(): HasMany
+    {
+        return $this->hasMany(Device::class);
     }
 }

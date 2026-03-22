@@ -14,6 +14,37 @@ use Inertia\Response;
 
 class ServerController extends Controller
 {
+    public function index(Request $request): Response
+    {
+        $user = $request->user();
+        $team = $user->currentTeam();
+
+        $servers = $team->managedServers()
+            ->with(['credential', 'devices'])
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn ($server) => [
+                'id' => $server->id,
+                'name' => $server->name,
+                'status' => $server->status->value,
+                'ip_address' => $server->ip_address,
+                'provider' => $server->provider->value,
+                'region_id' => $server->region_id,
+                'size_id' => $server->size_id,
+                'credential_name' => $server->credential->name,
+                'devices' => $server->devices->map(fn ($device) => [
+                    'id' => $device->id,
+                    'name' => $device->name,
+                    'connected' => $device->connected,
+                ]),
+            ]);
+
+        return Inertia::render('Servers/Index', [
+            'servers' => $servers,
+            'isOwner' => $user->isOwnerOf($team),
+        ]);
+    }
+
     public function create(Request $request): Response
     {
         $user = $request->user();
