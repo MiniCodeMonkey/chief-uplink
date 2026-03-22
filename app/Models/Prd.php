@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['device_id', 'project_id', 'title', 'status', 'content', 'progress', 'chat_history', 'session_id'])]
 class Prd extends Model
@@ -42,5 +43,13 @@ class Prd extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    /**
+     * @return HasMany<Run, $this>
+     */
+    public function runs(): HasMany
+    {
+        return $this->hasMany(Run::class);
     }
 }

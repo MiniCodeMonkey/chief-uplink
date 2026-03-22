@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Device;
+use App\Models\Run;
 use App\Models\User;
 use Illuminate\Support\Facades\Broadcast;
 
@@ -16,4 +17,10 @@ Broadcast::channel('device.{deviceId}', function (User $user, int $deviceId) {
 
 Broadcast::channel('team.{teamId}.devices', function (User $user, int $teamId) {
     return $user->teams()->where('teams.id', $teamId)->exists();
+});
+
+Broadcast::channel('run.{runId}', function (User $user, int $runId) {
+    $run = Run::find($runId);
+
+    return $run && $user->teams()->where('teams.id', $run->device->team_id)->exists();
 });
