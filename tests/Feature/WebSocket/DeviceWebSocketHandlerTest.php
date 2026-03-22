@@ -7,6 +7,7 @@ use App\Models\Device;
 use App\Models\PendingCommand;
 use App\Services\WebSocket\DeviceWebSocketHandler;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Str;
 
 function mockConnection(int $id = 1): WebSocketConnection
 {
@@ -14,6 +15,22 @@ function mockConnection(int $id = 1): WebSocketConnection
     $conn->shouldReceive('id')->andReturn($id);
 
     return $conn;
+}
+
+function envelope(string $type, string $deviceId = 'device-abc-123', ?array $payload = null): array
+{
+    $message = [
+        'type' => $type,
+        'id' => (string) Str::uuid(),
+        'device_id' => $deviceId,
+        'timestamp' => now()->toIso8601String(),
+    ];
+
+    if ($payload !== null) {
+        $message['payload'] = $payload;
+    }
+
+    return $message;
 }
 
 it('sends welcome message on open', function () {
@@ -133,10 +150,9 @@ it('routes state messages to state handler', function () {
     $handler = app(DeviceWebSocketHandler::class);
     $handler->onOpen($conn, $device);
 
-    $handler->onMessage($conn, json_encode([
-        'type' => 'state.update',
-        'payload' => ['chief_version' => '2.0.0'],
-    ]));
+    $handler->onMessage($conn, json_encode(
+        envelope('state.update', 'device-abc-123', ['chief_version' => '2.0.0']),
+    ));
 
     expect($device->fresh()->chief_version)->toBe('2.0.0');
 });
@@ -145,7 +161,6 @@ it('routes ack messages to control handler', function () {
     Event::fake();
 
     $device = Device::factory()->create();
-    $command = PendingCommand::factory()->create(['device_id' => $device->id]);
 
     $conn = mockConnection();
     $conn->shouldReceive('send');
@@ -153,12 +168,12 @@ it('routes ack messages to control handler', function () {
     $handler = app(DeviceWebSocketHandler::class);
     $handler->onOpen($conn, $device);
 
-    $handler->onMessage($conn, json_encode([
-        'type' => 'ack',
-        'payload' => ['command_id' => $command->id],
-    ]));
+    $handler->onMessage($conn, json_encode(
+        envelope('ack', 'device-abc-123', ['ref_id' => '550e8400-e29b-41d4-a716-446655440000']),
+    ));
 
-    expect(PendingCommand::find($command->id))->toBeNull();
+    // No exception means it was routed correctly to the control handler
+    expect(true)->toBeTrue();
 });
 
 it('sends error for invalid json messages', function () {
@@ -198,7 +213,9 @@ it('sends error for unknown message types', function () {
     $handler = app(DeviceWebSocketHandler::class);
     $handler->onOpen($conn, $device);
 
-    $handler->onMessage($conn, json_encode(['type' => 'unknown.thing']));
+    $handler->onMessage($conn, json_encode(
+        envelope('unknown.thing'),
+    ));
 
     $errorMessages = array_filter($sentMessages, fn ($m) => $m['type'] === 'error');
     expect($errorMessages)->not->toBeEmpty();

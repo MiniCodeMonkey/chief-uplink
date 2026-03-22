@@ -14,6 +14,7 @@ class DeviceWebSocketHandler
     public function __construct(
         private DeviceConnectionManager $connectionManager,
         private MessageRouter $messageRouter,
+        private MessageValidator $messageValidator,
     ) {}
 
     /**
@@ -71,6 +72,21 @@ class DeviceWebSocketHandler
             $connection->send([
                 'type' => 'error',
                 'payload' => ['code' => 'invalid_message', 'message' => 'Invalid JSON message format'],
+            ]);
+
+            return;
+        }
+
+        $validation = $this->messageValidator->validate($message);
+
+        if (! $validation['valid']) {
+            $connection->send([
+                'type' => 'error',
+                'payload' => [
+                    'code' => 'validation_error',
+                    'message' => 'Message failed schema validation',
+                    'details' => $validation['errors'],
+                ],
             ]);
 
             return;

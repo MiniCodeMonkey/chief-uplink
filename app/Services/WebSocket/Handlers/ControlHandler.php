@@ -32,15 +32,15 @@ class ControlHandler
      */
     private function handleAck(Device $device, array $message): void
     {
-        $commandId = $message['payload']['command_id'] ?? null;
+        $refId = $message['payload']['ref_id'] ?? null;
 
-        if ($commandId) {
-            $device->pendingCommands()->where('id', $commandId)->delete();
+        if ($refId) {
+            $device->pendingCommands()->where('id', $refId)->delete();
         }
 
         Log::debug('Device ack received', [
             'device_id' => $device->id,
-            'command_id' => $commandId,
+            'ref_id' => $refId,
         ]);
     }
 
