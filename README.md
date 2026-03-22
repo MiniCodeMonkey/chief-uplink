@@ -1,6 +1,6 @@
 # Chief Uplink
 
-Remote control panel for [Chief](https://github.com/chief-tools/chief) — manage your AI coding agent from a web dashboard.
+Remote control panel for [Chief](https://github.com/MiniCodeMonkey/chief) — manage your AI coding agent from a web dashboard.
 
 Chief Uplink is the web companion to the Chief CLI. It provides a real-time dashboard for monitoring and controlling Chief sessions, managing PRDs, viewing run history, and receiving push notifications — all from your browser.
 
@@ -30,7 +30,7 @@ Chief Uplink is the web companion to the Chief CLI. It provides a real-time dash
 
 ## Quick Start (Hosted)
 
-Sign up at [chiefuplink.com](https://chiefuplink.com), connect your Chief CLI, and you're ready to go.
+Sign up at [uplink.chiefloop.com](https://uplink.chiefloop.com), connect your Chief CLI, and you're ready to go.
 
 ## Development Setup
 
@@ -43,7 +43,7 @@ Sign up at [chiefuplink.com](https://chiefuplink.com), connect your Chief CLI, a
 
 ```bash
 # Clone the repository
-git clone https://github.com/chief-tools/chief-uplink.git
+git clone https://github.com/MiniCodeMonkey/chief-uplink.git
 cd chief-uplink
 
 # Copy environment file

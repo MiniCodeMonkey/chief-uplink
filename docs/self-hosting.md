@@ -14,7 +14,7 @@ This guide covers deploying Chief Uplink on your own infrastructure.
 ### 1. Clone and Configure
 
 ```bash
-git clone https://github.com/chief-tools/chief-uplink.git
+git clone https://github.com/MiniCodeMonkey/chief-uplink.git
 cd chief-uplink
 cp .env.example .env
 ```
