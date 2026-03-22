@@ -1,0 +1,71 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "${APP_PORT:-8000}:8000"
+      - "${VITE_PORT:-5173}:5173"
+    volumes:
+      - .:/app
+      - /app/vendor
+      - /app/node_modules
+    environment:
+      - APP_ENV=${APP_ENV:-local}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - chief-uplink
+
+  mariadb:
+    image: mariadb:11
+    ports:
+      - "${FORWARD_DB_PORT:-3306}:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: "${DB_PASSWORD:-secret}"
+      MARIADB_DATABASE: "${DB_DATABASE:-chief_uplink}"
+      MARIADB_USER: "${DB_USERNAME:-chief}"
+      MARIADB_PASSWORD: "${DB_PASSWORD:-secret}"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - chief-uplink
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${FORWARD_REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - chief-uplink
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "${FORWARD_MAILPIT_PORT:-8025}:8025"
+      - "${FORWARD_MAILPIT_SMTP_PORT:-1025}:1025"
+    networks:
+      - chief-uplink
+
+volumes:
+  mariadb-data:
+  redis-data:
+
+networks:
+  chief-uplink:
+    driver: bridge
