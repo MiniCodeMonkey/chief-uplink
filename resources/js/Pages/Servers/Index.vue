@@ -55,10 +55,11 @@ function hasOnlineDevice(server) {
         <EmptyServers v-if="!hasServers" />
 
         <div v-else class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div
+            <Link
                 v-for="server in servers"
                 :key="server.id"
-                class="rounded-lg border border-border bg-bg-card p-4 transition-colors hover:border-border-hover"
+                :href="`/servers/${server.id}`"
+                class="block rounded-lg border border-border bg-bg-card p-4 transition-colors hover:border-border-hover"
             >
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0 flex-1">
@@ -102,7 +103,7 @@ function hasOnlineDevice(server) {
                         </div>
                     </div>
                 </div>
-            </div>
+            </Link>
         </div>
     </div>
 </template>

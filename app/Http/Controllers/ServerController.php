@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreServerRequest;
 use App\Jobs\ProvisionServerJob;
 use App\Models\CloudProviderCredential;
+use App\Models\ManagedServer;
 use App\Services\CloudProvider\CloudProviderFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -14,6 +15,43 @@ use Inertia\Response;
 
 class ServerController extends Controller
 {
+    public function show(Request $request, ManagedServer $server): Response
+    {
+        $user = $request->user();
+        $team = $user->currentTeam();
+
+        if ($server->team_id !== $team->id) {
+            abort(403);
+        }
+
+        $server->load(['credential', 'sshKey', 'devices']);
+
+        return Inertia::render('Servers/Show', [
+            'server' => [
+                'id' => $server->id,
+                'name' => $server->name,
+                'status' => $server->status->value,
+                'ip_address' => $server->ip_address,
+                'provider' => $server->provider->value,
+                'region_id' => $server->region_id,
+                'size_id' => $server->size_id,
+                'credential_name' => $server->credential->name,
+                'ssh_key' => $server->sshKey ? [
+                    'id' => $server->sshKey->id,
+                    'name' => $server->sshKey->name,
+                    'public_key' => $server->sshKey->public_key,
+                ] : null,
+                'devices' => $server->devices->map(fn ($device) => [
+                    'id' => $device->id,
+                    'name' => $device->name,
+                    'connected' => $device->connected,
+                ]),
+            ],
+            'isOwner' => $user->isOwnerOf($team),
+            'hasGitHubToken' => (bool) $user->github_token,
+        ]);
+    }
+
     public function index(Request $request): Response
     {
         $user = $request->user();

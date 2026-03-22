@@ -3,6 +3,7 @@
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\FileController;
+use App\Http\Controllers\GitHubKeyController;
 use App\Http\Controllers\PrdController;
 use App\Http\Controllers\RunController;
 use App\Http\Controllers\ServerController;
@@ -29,6 +30,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/servers', [ServerController::class, 'store'])->name('servers.store');
     Route::get('/servers/credentials/{credential}/regions', [ServerController::class, 'regions'])->name('servers.regions');
     Route::get('/servers/credentials/{credential}/sizes', [ServerController::class, 'sizes'])->name('servers.sizes');
+    Route::get('/servers/{server}', [ServerController::class, 'show'])->name('servers.show');
+    Route::post('/servers/{server}/deploy-key', [GitHubKeyController::class, 'store'])->name('servers.deploy-key');
+    Route::get('/github/keys/authorize', [GitHubKeyController::class, 'authorize'])->name('github.keys.authorize');
+    Route::get('/github/keys/callback', [GitHubKeyController::class, 'callback'])->name('github.keys.callback');
     Route::get('/settings', [ProfileSettingsController::class, 'index'])->name('settings.profile');
     Route::put('/settings/profile', [ProfileSettingsController::class, 'updateProfile'])->name('settings.profile.update');
     Route::put('/settings/theme', [ProfileSettingsController::class, 'updateTheme'])->name('settings.theme.update');
