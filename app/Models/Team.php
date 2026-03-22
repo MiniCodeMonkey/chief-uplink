@@ -65,4 +65,12 @@ class Team extends Model
     {
         return $this->hasMany(SshKey::class);
     }
+
+    /**
+     * @return HasMany<ManagedServer, $this>
+     */
+    public function managedServers(): HasMany
+    {
+        return $this->hasMany(ManagedServer::class);
+    }
 }

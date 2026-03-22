@@ -5,6 +5,7 @@ use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\PrdController;
 use App\Http\Controllers\RunController;
+use App\Http\Controllers\ServerController;
 use App\Http\Controllers\Settings\CloudProviderCredentialController;
 use App\Http\Controllers\Settings\ProfileSettingsController;
 use App\Http\Controllers\Settings\SshKeyController;
@@ -23,6 +24,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/runs/{run}/live', [RunController::class, 'live'])->name('runs.live');
     Route::get('/runs/{run}/diffs', [RunController::class, 'diffs'])->name('runs.diffs');
     Route::get('/files/{device}/{path?}', [FileController::class, 'show'])->where('path', '.*')->name('files.show');
+    Route::get('/servers/create', [ServerController::class, 'create'])->name('servers.create');
+    Route::post('/servers', [ServerController::class, 'store'])->name('servers.store');
+    Route::get('/servers/credentials/{credential}/regions', [ServerController::class, 'regions'])->name('servers.regions');
+    Route::get('/servers/credentials/{credential}/sizes', [ServerController::class, 'sizes'])->name('servers.sizes');
     Route::get('/settings', [ProfileSettingsController::class, 'index'])->name('settings.profile');
     Route::put('/settings/profile', [ProfileSettingsController::class, 'updateProfile'])->name('settings.profile.update');
     Route::put('/settings/theme', [ProfileSettingsController::class, 'updateTheme'])->name('settings.theme.update');
