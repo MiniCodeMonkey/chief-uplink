@@ -13,6 +13,7 @@ Route::get('/', DashboardController::class);
 Route::middleware('auth')->group(function () {
     Route::put('/team/switch', TeamSwitcherController::class)->name('team.switch');
     Route::get('/devices', [DeviceController::class, 'index'])->name('devices.index');
+    Route::get('/prds/{prd}', [PrdController::class, 'show'])->name('prds.show');
     Route::get('/prds/{prd}/chat', [PrdController::class, 'chat'])->name('prds.chat');
     Route::get('/settings', [ProfileSettingsController::class, 'index'])->name('settings.profile');
     Route::put('/settings/profile', [ProfileSettingsController::class, 'updateProfile'])->name('settings.profile.update');
