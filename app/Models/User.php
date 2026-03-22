@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password', 'github_id', 'github_token', 'avatar_url', 'last_visited_url', 'theme_preference'])]
+#[Fillable(['name', 'email', 'password', 'github_id', 'github_token', 'avatar_url', 'last_visited_url', 'theme_preference', 'current_team_id'])]
 #[Hidden(['password', 'remember_token', 'github_token'])]
 class User extends Authenticatable
 {
@@ -55,9 +55,18 @@ class User extends Authenticatable
 
     /**
      * Returns the user's current team, creating a default one if none exists.
+     * Uses current_team_id if set, otherwise falls back to first team.
      */
     public function currentTeam(): Team
     {
+        if ($this->current_team_id) {
+            $team = $this->teams()->where('teams.id', $this->current_team_id)->first();
+
+            if ($team) {
+                return $team;
+            }
+        }
+
         $team = $this->teams()->first();
 
         if ($team) {
@@ -72,6 +81,18 @@ class User extends Authenticatable
         $this->teams()->attach($team, ['role' => TeamRole::Owner->value]);
 
         return $team;
+    }
+
+    /**
+     * Switch the user's active team.
+     */
+    public function switchTeam(Team $team): void
+    {
+        if (! $this->isMemberOf($team)) {
+            throw new \InvalidArgumentException('User is not a member of this team.');
+        }
+
+        $this->update(['current_team_id' => $team->id]);
     }
 
     public function isOwnerOf(Team $team): bool

@@ -37,6 +37,7 @@ class UserFactory extends Factory
             'avatar_url' => null,
             'last_visited_url' => null,
             'theme_preference' => ThemePreference::System,
+            'current_team_id' => null,
             'remember_token' => Str::random(10),
         ];
     }

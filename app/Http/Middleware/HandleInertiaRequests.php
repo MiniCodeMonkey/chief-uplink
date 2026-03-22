@@ -33,6 +33,14 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'auth' => fn () => $request->user() ? [
                 'user' => $request->user()->only('id', 'name', 'email', 'avatar_url'),
+                'currentTeam' => [
+                    'id' => $request->user()->currentTeam()->id,
+                    'name' => $request->user()->currentTeam()->name,
+                ],
+                'teams' => $request->user()->teams()->get()->map(fn ($team) => [
+                    'id' => $team->id,
+                    'name' => $team->name,
+                ]),
             ] : null,
             'flash' => fn () => [
                 'success' => $request->session()->get('success'),
