@@ -104,4 +104,12 @@ class User extends Authenticatable
     {
         return $this->teams()->where('teams.id', $team->id)->exists();
     }
+
+    /**
+     * @return HasMany<PushSubscription, $this>
+     */
+    public function pushSubscriptions(): HasMany
+    {
+        return $this->hasMany(PushSubscription::class);
+    }
 }
