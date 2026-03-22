@@ -6,10 +6,15 @@
 
         <title inertia>{{ config('app.name', 'Chief Uplink') }}</title>
 
+        <!-- Geist Sans & Geist Mono fonts via CDN -->
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/geist@1/dist/fonts/geist-sans/style.min.css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/geist@1/dist/fonts/geist-mono/style.min.css">
+
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         @inertiaHead
     </head>
-    <body class="font-sans antialiased">
+    <body class="bg-bg text-text font-sans antialiased">
         @inertia
     </body>
 </html>
