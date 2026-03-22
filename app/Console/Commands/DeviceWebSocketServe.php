@@ -3,8 +3,11 @@
 namespace App\Console\Commands;
 
 use App\Models\Device;
+use App\Models\PendingCommand;
+use App\Services\WebSocket\DeviceConnectionManager;
 use App\Services\WebSocket\DeviceWebSocketHandler;
 use App\Services\WebSocket\ReactPhpWebSocketConnection;
+use Clue\React\Redis\RedisClient;
 use GuzzleHttp\Psr7\Message;
 use Illuminate\Console\Command;
 use Ratchet\RFC6455\Handshake\ServerNegotiator;
@@ -23,11 +26,13 @@ class DeviceWebSocketServe extends Command
 
     protected $description = 'Start the device WebSocket server';
 
-    public function handle(DeviceWebSocketHandler $handler): int
+    public function handle(DeviceWebSocketHandler $handler, DeviceConnectionManager $connectionManager): int
     {
         $host = $this->option('host');
         $port = $this->option('port');
         $negotiator = new ServerNegotiator;
+
+        $this->subscribeToCommandChannel($handler, $connectionManager);
 
         $server = new SocketServer("{$host}:{$port}");
 
@@ -147,5 +152,51 @@ class DeviceWebSocketServe extends Command
         Loop::run();
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Subscribe to Redis for immediate command forwarding to connected devices.
+     */
+    private function subscribeToCommandChannel(DeviceWebSocketHandler $handler, DeviceConnectionManager $connectionManager): void
+    {
+        $redisHost = config('database.redis.default.host', '127.0.0.1');
+        $redisPort = config('database.redis.default.port', 6379);
+        $redisPassword = config('database.redis.default.password');
+
+        $redisUri = $redisPassword
+            ? "redis://{$redisPassword}@{$redisHost}:{$redisPort}"
+            : "redis://{$redisHost}:{$redisPort}";
+
+        $redis = new RedisClient($redisUri);
+
+        $redis->on('pmessage', function (string $pattern, string $channel, string $message) use ($handler, $connectionManager): void {
+            if (! preg_match('/^device-commands:(\d+)$/', $channel, $matches)) {
+                return;
+            }
+
+            $deviceId = (int) $matches[1];
+            $connection = $connectionManager->getConnectionForDevice($deviceId);
+
+            if (! $connection) {
+                return;
+            }
+
+            $device = Device::find($deviceId);
+
+            if (! $device) {
+                return;
+            }
+
+            $data = json_decode($message, true);
+            $command = PendingCommand::find($data['command_id'] ?? null);
+
+            if ($command) {
+                $handler->forwardCommand($connection, $device, $command);
+            }
+        });
+
+        $redis->psubscribe('device-commands:*');
+
+        $this->info('Subscribed to Redis command channels');
     }
 }

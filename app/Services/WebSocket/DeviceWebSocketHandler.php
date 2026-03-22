@@ -6,6 +6,7 @@ use App\Contracts\WebSocketConnection;
 use App\Events\DeviceConnected;
 use App\Events\DeviceDisconnected;
 use App\Models\Device;
+use App\Models\PendingCommand;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -144,6 +145,22 @@ class DeviceWebSocketHandler
     }
 
     /**
+     * Forward a single pending command to the device in protocol envelope format.
+     */
+    public function forwardCommand(WebSocketConnection $connection, Device $device, PendingCommand $command): void
+    {
+        $connection->send([
+            'type' => $command->type,
+            'id' => $command->message_id,
+            'device_id' => (string) $device->id,
+            'timestamp' => now()->toIso8601String(),
+            'payload' => $command->payload ?? (object) [],
+        ]);
+
+        $command->delete();
+    }
+
+    /**
      * Drain pending commands to the device (oldest first).
      */
     private function drainPendingCommands(WebSocketConnection $connection, Device $device): void
@@ -151,14 +168,7 @@ class DeviceWebSocketHandler
         $commands = $device->pendingCommands()->orderBy('created_at', 'asc')->get();
 
         foreach ($commands as $command) {
-            $connection->send([
-                'type' => 'command',
-                'payload' => [
-                    'command_id' => $command->id,
-                    'command_type' => $command->type,
-                    'data' => $command->payload,
-                ],
-            ]);
+            $this->forwardCommand($connection, $device, $command);
         }
     }
 }

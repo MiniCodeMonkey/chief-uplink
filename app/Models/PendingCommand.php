@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['device_id', 'type', 'payload'])]
+#[Fillable(['device_id', 'message_id', 'type', 'payload'])]
 class PendingCommand extends Model
 {
     /** @use HasFactory<PendingCommandFactory> */

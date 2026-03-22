@@ -102,13 +102,14 @@ it('drains pending commands oldest first on open', function () {
     $handler = app(DeviceWebSocketHandler::class);
     $handler->onOpen($conn, $device);
 
-    // First message is welcome, then commands
+    // First message is welcome, then commands in protocol envelope format
     expect($sentCommands)->toHaveCount(3)
         ->and($sentCommands[0]['type'])->toBe('welcome')
-        ->and($sentCommands[1]['type'])->toBe('command')
-        ->and($sentCommands[1]['payload']['command_id'])->toBe($cmd1->id)
-        ->and($sentCommands[2]['type'])->toBe('command')
-        ->and($sentCommands[2]['payload']['command_id'])->toBe($cmd2->id);
+        ->and($sentCommands[1]['type'])->toBe($cmd1->type)
+        ->and($sentCommands[1]['id'])->toBe($cmd1->message_id)
+        ->and($sentCommands[1]['device_id'])->toBe((string) $device->id)
+        ->and($sentCommands[2]['type'])->toBe($cmd2->type)
+        ->and($sentCommands[2]['id'])->toBe($cmd2->message_id);
 });
 
 it('fires DeviceDisconnected event on close', function () {

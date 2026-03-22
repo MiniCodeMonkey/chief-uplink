@@ -20,7 +20,8 @@ class PendingCommandFactory extends Factory
     {
         return [
             'device_id' => Device::factory(),
-            'type' => fake()->randomElement(['sync.state', 'run.start', 'config.update']),
+            'message_id' => fake()->uuid(),
+            'type' => fake()->randomElement(['cmd.prd.create', 'cmd.run.start', 'cmd.settings.get']),
             'payload' => ['key' => fake()->word()],
         ];
     }
