@@ -29,4 +29,24 @@ class RunController extends Controller
             'device' => $device->only(['id', 'name', 'os', 'connected']),
         ]);
     }
+
+    public function live(Request $request, Run $run): Response
+    {
+        $user = $request->user();
+        $device = $run->device;
+
+        abort_unless(
+            $user->isMemberOf($device->team),
+            HttpResponse::HTTP_FORBIDDEN,
+            'You are not a member of this team.'
+        );
+
+        $run->load('prd');
+
+        return Inertia::render('Runs/Live', [
+            'run' => $run,
+            'prd' => $run->prd,
+            'device' => $device->only(['id', 'name', 'os', 'connected']),
+        ]);
+    }
 }

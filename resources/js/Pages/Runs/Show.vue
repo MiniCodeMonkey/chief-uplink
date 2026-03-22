@@ -1,5 +1,5 @@
 <script setup>
-import { Head, usePage } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import axios from 'axios';
 
@@ -205,6 +205,21 @@ onUnmounted(() => {
 
             <!-- Action Buttons -->
             <div class="flex shrink-0 items-center gap-2">
+                <!-- Summary / Live toggle -->
+                <div class="inline-flex rounded-md border border-border">
+                    <span
+                        class="rounded-l-md bg-bg-surface px-3 py-1.5 text-sm font-medium text-text-heading"
+                    >
+                        Summary
+                    </span>
+                    <Link
+                        :href="`/runs/${run.id}/live`"
+                        class="rounded-r-md px-3 py-1.5 text-sm font-medium transition-colors text-text-secondary hover:bg-bg-surface hover:text-text"
+                    >
+                        Live
+                    </Link>
+                </div>
+
                 <button
                     v-if="isRunning"
                     @click="stopRun"
@@ -212,16 +227,6 @@ onUnmounted(() => {
                     class="inline-flex items-center gap-1.5 rounded-md border border-error/30 px-3 py-1.5 text-sm font-medium text-error transition-colors hover:bg-error/10 disabled:opacity-50"
                 >
                     {{ isStopping ? 'Stopping...' : 'Stop Run' }}
-                </button>
-                <button
-                    class="inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-card px-3 py-1.5 text-sm font-medium text-text-heading transition-colors hover:border-border-hover hover:bg-bg-surface"
-                >
-                    View Diffs
-                </button>
-                <button
-                    class="inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-card px-3 py-1.5 text-sm font-medium text-text-heading transition-colors hover:border-border-hover hover:bg-bg-surface"
-                >
-                    View Log
                 </button>
             </div>
         </div>
