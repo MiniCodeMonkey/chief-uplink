@@ -9,7 +9,7 @@ const navItems = [
     { label: 'Home', href: '/', icon: 'home' },
     { label: 'Devices', href: '/devices', icon: 'devices' },
     { label: 'Servers', href: '/servers', icon: 'servers' },
-    { label: 'Settings', href: '/settings', icon: 'settings' },
+    { label: 'Settings', href: '/settings/team', icon: 'settings' },
 ];
 
 function isActive(href) {
