@@ -13,3 +13,7 @@ Broadcast::channel('device.{deviceId}', function (User $user, int $deviceId) {
 
     return $device && $user->teams()->where('teams.id', $device->team_id)->exists();
 });
+
+Broadcast::channel('team.{teamId}.devices', function (User $user, int $teamId) {
+    return $user->teams()->where('teams.id', $teamId)->exists();
+});
