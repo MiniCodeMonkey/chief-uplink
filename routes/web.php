@@ -18,6 +18,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/prds/{prd}/chat', [PrdController::class, 'chat'])->name('prds.chat');
     Route::get('/runs/{run}', [RunController::class, 'show'])->name('runs.show');
     Route::get('/runs/{run}/live', [RunController::class, 'live'])->name('runs.live');
+    Route::get('/runs/{run}/diffs', [RunController::class, 'diffs'])->name('runs.diffs');
     Route::get('/settings', [ProfileSettingsController::class, 'index'])->name('settings.profile');
     Route::put('/settings/profile', [ProfileSettingsController::class, 'updateProfile'])->name('settings.profile.update');
     Route::put('/settings/theme', [ProfileSettingsController::class, 'updateTheme'])->name('settings.theme.update');

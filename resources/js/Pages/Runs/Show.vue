@@ -214,9 +214,15 @@ onUnmounted(() => {
                     </span>
                     <Link
                         :href="`/runs/${run.id}/live`"
-                        class="rounded-r-md px-3 py-1.5 text-sm font-medium transition-colors text-text-secondary hover:bg-bg-surface hover:text-text"
+                        class="border-x border-border px-3 py-1.5 text-sm font-medium transition-colors text-text-secondary hover:bg-bg-surface hover:text-text"
                     >
                         Live
+                    </Link>
+                    <Link
+                        :href="`/runs/${run.id}/diffs`"
+                        class="rounded-r-md px-3 py-1.5 text-sm font-medium transition-colors text-text-secondary hover:bg-bg-surface hover:text-text"
+                    >
+                        Diffs
                     </Link>
                 </div>
 
