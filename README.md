@@ -1,58 +1,132 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Chief Uplink
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Remote control panel for [Chief](https://github.com/chief-tools/chief) — manage your AI coding agent from a web dashboard.
 
-## About Laravel
+Chief Uplink is the web companion to the Chief CLI. It provides a real-time dashboard for monitoring and controlling Chief sessions, managing PRDs, viewing run history, and receiving push notifications — all from your browser.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Features
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **Real-time device connection** — WebSocket link between the CLI and dashboard with live status updates
+- **Run management** — Start, monitor, and review AI coding runs with story-level progress tracking
+- **PRD workspace** — Create and manage Product Requirement Documents that drive Chief's planning
+- **Team collaboration** — Invite team members, manage roles, and share device access
+- **Push notifications** — Browser push notifications for run completions and device events
+- **GitHub OAuth** — Sign in with GitHub, link deploy keys for repository access
+- **Cloud provider integration** — Connect Anthropic and other AI providers via the dashboard
+- **Self-hostable** — Run the entire stack on your own infrastructure with Docker
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Tech Stack
 
-## Learning Laravel
+| Layer | Technology |
+|-------|-----------|
+| Backend | PHP 8.5, Laravel 13, Octane (FrankenPHP) |
+| Frontend | Vue 3, Inertia.js v2, Tailwind CSS 4 |
+| Real-time | Laravel Reverb (WebSockets), Laravel Echo |
+| Database | MariaDB 11 |
+| Cache/Pub-Sub | Redis 7 |
+| Auth | Laravel Sanctum, Laravel Socialite (GitHub OAuth) |
+| Testing | Pest 4, Vitest, Playwright |
+| Containerization | Docker, FrankenPHP |
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Quick Start (Hosted)
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+Sign up at [chiefuplink.com](https://chiefuplink.com), connect your Chief CLI, and you're ready to go.
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+## Development Setup
 
-## Agentic Development
+### Prerequisites
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+- Docker & Docker Compose
+- Git
+
+### Getting Started
 
 ```bash
-composer require laravel/boost --dev
+# Clone the repository
+git clone https://github.com/chief-tools/chief-uplink.git
+cd chief-uplink
 
-php artisan boost:install
+# Copy environment file
+cp .env.example .env
+
+# Start all services (app, MariaDB, Redis, Mailpit)
+docker compose up -d
+
+# Run setup (install deps, generate key, run migrations, build assets)
+docker compose exec app composer setup
+
+# The app is now running at http://localhost:8000
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+### Development Server
 
-## Contributing
+For active development with hot-reload:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+# Inside the container
+docker compose exec app composer run dev
+```
 
-## Code of Conduct
+This starts concurrently:
+- **Laravel server** on port 8000
+- **Queue worker** for background jobs
+- **Pail** for log tailing
+- **Vite** dev server on port 5173
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### Environment
 
-## Security Vulnerabilities
+Mailpit is included for local email testing — view captured emails at `http://localhost:8025`.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Configure GitHub OAuth by setting `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env`.
+
+For push notifications, generate VAPID keys and set `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`.
+
+## Testing
+
+```bash
+# PHP tests (Pest)
+docker compose exec app php artisan test --compact
+
+# Run a specific test
+docker compose exec app php artisan test --compact --filter=testName
+
+# JavaScript tests (Vitest)
+docker compose exec app npm run test
+
+# Browser tests (Playwright)
+docker compose exec app npm run test:browser
+
+# Code formatting (Pint)
+docker compose exec app vendor/bin/pint --dirty
+```
+
+## Project Structure
+
+```
+app/
+├── Contracts/          # Interfaces (WebSocketConnection, CloudProviderInterface)
+├── Enums/              # Backed string enums (TitleCase keys)
+├── Events/             # Broadcast events
+├── Http/Controllers/   # Route controllers
+├── Models/             # Eloquent models
+└── Services/           # Business logic (CloudProvider, WebSocket)
+resources/
+├── css/                # Tailwind theme & design tokens
+└── js/
+    ├── Components/     # Shared Vue components
+    ├── Layouts/        # App layouts
+    ├── Pages/          # Inertia page components
+    └── composables/    # Vue composables (Echo, utilities)
+tests/
+├── Feature/            # Feature tests (Pest)
+├── Unit/               # Unit tests (Pest)
+└── Browser/            # Playwright browser tests
+```
+
+## Self-Hosting
+
+See [docs/self-hosting.md](docs/self-hosting.md) for deployment instructions, reverse proxy configuration, database backups, and update procedures.
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+MIT
