@@ -11,6 +11,10 @@ class DashboardController extends Controller
 {
     public function __invoke(Request $request): RedirectResponse|Response
     {
+        if (! $request->user()) {
+            return Inertia::render('Welcome');
+        }
+
         $lastVisitedUrl = $request->session()->get('last_visited_url');
 
         if ($lastVisitedUrl) {
